@@ -1,6 +1,8 @@
 "use client";
 
-import React from "react"
+import Link from "next/link";
+import ArrowLeft from "lucide-react/dist/esm/icons/ArrowLeft"; // Added import for ArrowLeft
+import React from "react";
 
 import useSWR from "swr";
 import { useState } from "react";
@@ -9,11 +11,9 @@ import {
   Wrench,
   Plus,
   Loader2,
-  ArrowLeft,
   DollarSign,
   Settings,
 } from "lucide-react";
-import Link from "next/link";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -72,23 +72,14 @@ export default function OperacoesPage() {
     <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Page Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-            aria-label="Voltar"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-              <Wrench className="h-6 w-6 text-accent" />
-              Operacoes
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Gerenciar tipos de operacao e custos de maquina
-            </p>
-          </div>
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <Wrench className="h-6 w-6 text-accent" />
+            Operacoes
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Gerenciar tipos de operacao e custos de maquina
+          </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}

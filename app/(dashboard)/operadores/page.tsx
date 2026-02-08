@@ -1,6 +1,9 @@
 "use client";
 
-import React from "react"
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react"; // Import ArrowLeft here
+
+import React from "react";
 
 import useSWR from "swr";
 import { useState } from "react";
@@ -13,12 +16,10 @@ import {
   TrendingUp,
   UserPlus,
   Loader2,
-  ArrowLeft,
   Package,
   Eye,
   EyeOff,
 } from "lucide-react";
-import Link from "next/link";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -93,23 +94,14 @@ export default function OperadoresPage() {
     <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Page Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Link
-            href="/"
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
-            aria-label="Voltar"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-              <Users className="h-6 w-6 text-accent" />
-              Operadores
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Gerenciar operadores e comparar desempenho
-            </p>
-          </div>
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <Users className="h-6 w-6 text-accent" />
+            Operadores
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Gerenciar operadores e comparar desempenho
+          </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}

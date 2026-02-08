@@ -55,8 +55,9 @@ export default function LoginPage() {
           ? `Bem-vindo, ${data.operator.name}!`
           : "Conta criada com sucesso!",
       );
-      router.push("/dashboard");
-      router.refresh();
+
+      // Full page navigation to ensure the cookie is sent with the request
+      window.location.href = "/dashboard";
     } catch {
       toast.error("Erro de conexao");
     } finally {

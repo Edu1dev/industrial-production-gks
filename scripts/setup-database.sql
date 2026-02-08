@@ -50,9 +50,10 @@ INSERT INTO operations (name, machine_cost_per_hour) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- Seed a demo operator (password: admin123)
+-- SHA-256 hash of "admin123" = 240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9
 INSERT INTO operators (name, login, password_hash) VALUES
-  ('Administrador', 'admin', '$2b$10$placeholder_will_be_set_by_app')
-ON CONFLICT (login) DO NOTHING;
+  ('Administrador', 'admin', '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9')
+ON CONFLICT (login) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_production_records_part_id ON production_records(part_id);

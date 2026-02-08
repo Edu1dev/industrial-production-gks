@@ -11,6 +11,7 @@ import {
   Wrench,
   History,
   Building2,
+  FolderKanban,
   Menu,
   X,
 } from "lucide-react";
@@ -27,10 +28,11 @@ export function DashboardHeader({ operator }: DashboardHeaderProps) {
 
   const navItems = [
     { href: "/dashboard", label: "Producao", icon: Activity, adminOnly: false },
+    { href: "/dashboard/projetos", label: "Projetos", icon: FolderKanban, adminOnly: true },
     { href: "/dashboard/operadores", label: "Operadores", icon: Users, adminOnly: true },
     { href: "/dashboard/operacoes", label: "Operacoes", icon: Wrench, adminOnly: true },
     { href: "/dashboard/empresas", label: "Empresas", icon: Building2, adminOnly: true },
-    { href: "/dashboard/historico", label: "Historico", icon: History, adminOnly: false },
+    { href: "/dashboard/historico", label: "Historico", icon: History, adminOnly: true },
   ];
 
   const visibleNavItems = navItems.filter(

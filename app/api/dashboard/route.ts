@@ -15,7 +15,8 @@ export async function GET() {
     SELECT pr.*, p.code as part_code, p.description as part_description, p.material_cost,
            o.name as operation_name, o.machine_cost_per_hour,
            op.name as operator_name,
-           c.name as company_name
+           c.name as company_name,
+           pr.project_id
     FROM production_records pr
     JOIN parts p ON pr.part_id = p.id
     JOIN operations o ON pr.operation_id = o.id

@@ -18,7 +18,11 @@ import {
   Loader2,
   Package,
   Eye,
-  EyeOff,
+  Pencil,
+  Trash2,
+  Key,
+  X,
+  AlertCircle,
 } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -42,6 +46,12 @@ export default function OperadoresPage() {
   const [registering, setRegistering] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({ name: "", login: "", password: "", is_admin: false });
+
+  // Management State
+  const [editingUnlocks, setEditingUnlocks] = useState<number | null>(null); // ID of operator to change password
+  const [newPassword, setNewPassword] = useState("");
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const operators: Operator[] = data?.operators || [];
 
@@ -87,6 +97,59 @@ export default function OperadoresPage() {
       toast.error("Erro de conexao");
     } finally {
       setRegistering(false);
+    }
+  }
+
+  async function handleUpdatePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingUnlocks || !newPassword) return;
+
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/operators/${editingUnlocks}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Erro ao atualizar senha");
+        return;
+      }
+
+      toast.success("Senha atualizada com sucesso");
+      setEditingUnlocks(null);
+      setNewPassword("");
+    } catch {
+      toast.error("Erro de conexao");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deletingId) return;
+
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/operators/${deletingId}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Erro ao excluir operador");
+        return;
+      }
+
+      toast.success("Operador excluido com sucesso");
+      setDeletingId(null);
+      mutate();
+    } catch {
+      toast.error("Erro de conexao");
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -366,6 +429,9 @@ export default function OperadoresPage() {
                   <th className="px-4 py-3 text-center font-semibold text-foreground">
                     Status
                   </th>
+                  <th className="px-4 py-3 text-right font-semibold text-foreground">
+                    Acoes
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -382,10 +448,10 @@ export default function OperadoresPage() {
                         {rank >= 0 ? (
                           <span
                             className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${rank === 0
-                                ? "bg-accent text-accent-foreground"
-                                : rank === 1
-                                  ? "bg-muted-foreground/20 text-foreground"
-                                  : "bg-muted text-muted-foreground"
+                              ? "bg-accent text-accent-foreground"
+                              : rank === 1
+                                ? "bg-muted-foreground/20 text-foreground"
+                                : "bg-muted text-muted-foreground"
                               }`}
                           >
                             {rank + 1}
@@ -456,11 +522,136 @@ export default function OperadoresPage() {
                           </span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingUnlocks(op.id);
+                              setNewPassword("");
+                            }}
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            title="Alterar Senha"
+                          >
+                            <Key className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeletingId(op.id)}
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                            title="Excluir Operador"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Password Change Modal */}
+      {editingUnlocks && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <form
+            onSubmit={handleUpdatePassword}
+            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
+          >
+            <div className="mb-6 flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-card-foreground">
+                  Alterar Senha
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Digite a nova senha para o operador.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUnlocks(null)}
+                className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <label
+                htmlFor="new_password"
+                className="mb-1.5 block text-sm font-medium text-card-foreground"
+              >
+                Nova Senha
+              </label>
+              <input
+                id="new_password"
+                type="text"
+                required
+                minLength={4}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Min. 4 caracteres"
+                className="h-12 w-full rounded-xl border border-input bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setEditingUnlocks(null)}
+                className="h-10 rounded-xl bg-muted px-4 font-medium text-muted-foreground transition-colors hover:bg-muted/80"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={actionLoading}
+                className="flex h-10 items-center gap-2 rounded-xl bg-accent px-4 font-bold text-accent-foreground transition-all hover:opacity-90 disabled:opacity-50"
+              >
+                {actionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                Salvar Senha
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10">
+              <AlertCircle className="h-6 w-6 text-destructive" />
+            </div>
+
+            <h3 className="mb-2 text-lg font-bold text-card-foreground">
+              Confirmar Exclusao
+            </h3>
+            <p className="mb-6 text-muted-foreground">
+              Tem certeza que deseja excluir este operador? Esta acao nao pode ser desfeita.
+              <br />
+              <span className="text-xs opacity-70">
+                Nota: Operadores com producoes registradas nao podem ser excluidos.
+              </span>
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeletingId(null)}
+                className="h-10 rounded-xl bg-muted px-4 font-medium text-muted-foreground transition-colors hover:bg-muted/80"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={actionLoading}
+                className="flex h-10 items-center gap-2 rounded-xl bg-destructive px-4 font-bold text-destructive-foreground transition-all hover:opacity-90 disabled:opacity-50"
+              >
+                {actionLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                Excluir
+              </button>
+            </div>
           </div>
         </div>
       )}

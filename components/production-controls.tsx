@@ -15,6 +15,15 @@ import {
 } from "lucide-react";
 import { ProductionTimer } from "./production-timer";
 import { FinishProductionDialog } from "./finish-production-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface ProductionRecord {
   id: number;
@@ -33,6 +42,7 @@ interface ProductionRecord {
   charged_value?: number;
   operator_name: string;
   company_name?: string;
+  project_id?: number | null;
 }
 
 interface ProductionControlsProps {
@@ -42,15 +52,17 @@ interface ProductionControlsProps {
 export function ProductionControls({ record }: ProductionControlsProps) {
   const [loading, setLoading] = useState<string | null>(null);
   const [showFinishDialog, setShowFinishDialog] = useState(false);
+  const [showPauseReasonDialog, setShowPauseReasonDialog] = useState(false);
+  const [pauseReason, setPauseReason] = useState("");
   const { mutate } = useSWRConfig();
 
-  async function handleAction(action: string) {
+  async function handleAction(action: string, extra?: Record<string, unknown>) {
     setLoading(action);
     try {
       const res = await fetch(`/api/production/${record.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, ...extra }),
       });
 
       const data = await res.json();
@@ -76,8 +88,28 @@ export function ProductionControls({ record }: ProductionControlsProps) {
     }
   }
 
+  function handlePauseClick() {
+    if (record.project_id) {
+      // Project-based: require reason
+      setShowPauseReasonDialog(true);
+    } else {
+      // Legacy: pause directly
+      handleAction("pause");
+    }
+  }
+
+  async function handlePauseWithReason() {
+    if (!pauseReason.trim()) {
+      toast.error("Informe o motivo da pausa");
+      return;
+    }
+    setShowPauseReasonDialog(false);
+    await handleAction("pause", { reason: pauseReason.trim() });
+    setPauseReason("");
+  }
+
   async function handleFinishClick() {
-    // Se estiver em produção, pausar primeiro
+    // Se estiver em producao, pausar primeiro (silenciosamente)
     if (record.status === "EM_PRODUCAO") {
       setLoading("pause");
       try {
@@ -95,14 +127,12 @@ export function ProductionControls({ record }: ProductionControlsProps) {
           return;
         }
 
-        toast.success("Produção pausada");
         mutate("/api/dashboard");
         mutate((key: string) => typeof key === "string" && key.startsWith("/api/production"), undefined, { revalidate: true });
 
-        // Aguardar um momento para o estado atualizar
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch {
-        toast.error("Erro de conexão");
+        toast.error("Erro de conexao");
         setLoading(null);
         return;
       } finally {
@@ -110,7 +140,6 @@ export function ProductionControls({ record }: ProductionControlsProps) {
       }
     }
 
-    // Agora mostrar o diálogo
     setShowFinishDialog(true);
   }
 
@@ -140,6 +169,11 @@ export function ProductionControls({ record }: ProductionControlsProps) {
             >
               {statusLabels[record.status]}
             </span>
+            {record.project_id && (
+              <span className="inline-flex items-center rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
+                Projeto
+              </span>
+            )}
           </div>
           {record.part_description && (
             <p className="mt-0.5 text-sm text-muted-foreground truncate">
@@ -176,7 +210,7 @@ export function ProductionControls({ record }: ProductionControlsProps) {
           {record.status === "EM_PRODUCAO" && (
             <>
               <button
-                onClick={() => handleAction("pause")}
+                onClick={handlePauseClick}
                 disabled={loading !== null}
                 className="flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-[hsl(var(--warning))] text-base font-bold text-[hsl(var(--warning-foreground))] transition-all hover:opacity-90 disabled:opacity-50"
               >
@@ -229,12 +263,53 @@ export function ProductionControls({ record }: ProductionControlsProps) {
         </div>
       )}
 
+      {/* Pause Reason Dialog */}
+      <Dialog open={showPauseReasonDialog} onOpenChange={setShowPauseReasonDialog}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Motivo da Pausa</DialogTitle>
+            <DialogDescription>
+              Informe o motivo da pausa para a peca <strong className="font-mono">{record.part_code}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <textarea
+              value={pauseReason}
+              onChange={(e) => setPauseReason(e.target.value)}
+              placeholder="Ex: Aguardando material, troca de ferramenta..."
+              rows={3}
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPauseReasonDialog(false);
+                setPauseReason("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handlePauseWithReason}
+              className="bg-[hsl(var(--warning))] text-[hsl(var(--warning-foreground))] hover:bg-[hsl(var(--warning))]/90"
+            >
+              <Pause className="mr-2 h-4 w-4" />
+              Pausar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <FinishProductionDialog
         open={showFinishDialog}
         onOpenChange={setShowFinishDialog}
         recordId={record.id}
         partCode={record.part_code}
         operationName={record.operation_name}
+        projectId={record.project_id || null}
         onFinished={() => {
           mutate("/api/dashboard");
           mutate((key: string) => typeof key === "string" && key.startsWith("/api/production"), undefined, { revalidate: true });

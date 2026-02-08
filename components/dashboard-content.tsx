@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   Activity,
   Clock,
@@ -9,12 +10,14 @@ import {
   TrendingUp,
   BarChart3,
   RefreshCw,
+  Search,
+  Loader2,
 } from "lucide-react";
 import {
   ProductionControls,
-  StartProductionForm,
 } from "./production-controls";
 import { PartSearch } from "./part-search";
+import { ProjectSearchResult } from "./project-search-result";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -42,6 +45,16 @@ export function DashboardContent({ operator }: DashboardContentProps) {
     refreshInterval: 10000,
   });
 
+  // Project search state
+  const [projectSearchCode, setProjectSearchCode] = useState("");
+  const [projectSearchLoading, setProjectSearchLoading] = useState(false);
+  const [projectSearchResult, setProjectSearchResult] = useState<{
+    project: any;
+    operations: any[];
+    best_time_per_piece_ms: number | null;
+  } | null>(null);
+  const [projectSearchError, setProjectSearchError] = useState("");
+
   const activeRecords = dashboardData?.activeRecords || [];
   const recentRecords = dashboardData?.recentRecords || [];
   const rankings = dashboardData?.rankings || [];
@@ -54,6 +67,45 @@ export function DashboardContent({ operator }: DashboardContentProps) {
   ];
 
   const visibleTabs = tabs.filter(tab => !tab.adminOnly || operator?.is_admin);
+
+  async function handleProjectSearch() {
+    if (!projectSearchCode.trim()) {
+      toast.error("Digite o codigo da peca");
+      return;
+    }
+
+    setProjectSearchLoading(true);
+    setProjectSearchError("");
+    setProjectSearchResult(null);
+
+    try {
+      const res = await fetch(`/api/projects/search?part_code=${encodeURIComponent(projectSearchCode.trim())}`);
+
+      if (!res.ok) {
+        try {
+          const data = await res.json();
+          setProjectSearchError(data.error || "Projeto nao encontrado");
+        } catch {
+          setProjectSearchError("Erro no servidor");
+        }
+        return;
+      }
+
+      const data = await res.json();
+      setProjectSearchResult(data);
+    } catch (err) {
+      console.error("Project search error:", err);
+      setProjectSearchError("Erro de conexao");
+    } finally {
+      setProjectSearchLoading(false);
+    }
+  }
+
+  function handleProjectStarted() {
+    setProjectSearchResult(null);
+    setProjectSearchCode("");
+    mutate();
+  }
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
@@ -116,6 +168,7 @@ export function DashboardContent({ operator }: DashboardContentProps) {
                     charged_value?: number;
                     operator_name: string;
                     company_name?: string;
+                    project_id?: number | null;
                   }) => (
                     <ProductionControls key={record.id} record={record} />
                   ),
@@ -124,8 +177,57 @@ export function DashboardContent({ operator }: DashboardContentProps) {
             </div>
           )}
 
-          {/* Start New Production */}
-          <StartProductionForm onStarted={() => mutate()} />
+          {/* Project Search */}
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-card-foreground">
+              <Search className="h-5 w-5 text-accent" />
+              Buscar Projeto
+            </h2>
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={projectSearchCode}
+                onChange={(e) => setProjectSearchCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleProjectSearch();
+                  }
+                }}
+                placeholder="Codigo da peca (ex: PCA-001)"
+                className="h-14 flex-1 rounded-xl border border-input bg-background px-4 font-mono text-lg font-bold text-foreground uppercase placeholder:text-muted-foreground placeholder:font-normal placeholder:text-base focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+              <button
+                onClick={handleProjectSearch}
+                disabled={projectSearchLoading}
+                className="flex h-14 items-center gap-2 rounded-xl bg-accent px-6 font-bold text-accent-foreground transition-all hover:opacity-90 disabled:opacity-50"
+              >
+                {projectSearchLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Search className="h-5 w-5" />
+                )}
+                Buscar
+              </button>
+            </div>
+
+            {projectSearchError && (
+              <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 p-4">
+                <p className="text-sm font-medium text-destructive">{projectSearchError}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Project Search Result */}
+          {projectSearchResult && (
+            <ProjectSearchResult
+              project={projectSearchResult.project}
+              operations={projectSearchResult.operations}
+              bestTimePerPieceMs={projectSearchResult.best_time_per_piece_ms}
+              onStarted={handleProjectStarted}
+              onCancel={() => setProjectSearchResult(null)}
+            />
+          )}
         </div>
       )}
 

@@ -12,7 +12,7 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const { action, charged_value } = await request.json();
+  const { action, charged_value, reason, complete_project } = await request.json();
 
   const sql = getDb();
 
@@ -38,11 +38,19 @@ export async function PATCH(
     }
 
     const updated = await sql`
-      UPDATE production_records 
+      UPDATE production_records
       SET status = 'PAUSADO', last_pause_start = NOW()
       WHERE id = ${parseInt(id)}
       RETURNING *
     `;
+
+    // Create pause_log with reason if provided (required for project-based production)
+    if (reason) {
+      await sql`
+        INSERT INTO pause_logs (production_record_id, reason, paused_at)
+        VALUES (${parseInt(id)}, ${reason}, NOW())
+      `;
+    }
 
     return NextResponse.json({ record: updated[0] });
   }
@@ -61,12 +69,24 @@ export async function PATCH(
       : 0;
 
     const updated = await sql`
-      UPDATE production_records 
-      SET status = 'EM_PRODUCAO', 
+      UPDATE production_records
+      SET status = 'EM_PRODUCAO',
           total_pause_ms = COALESCE(total_pause_ms, 0) + ${pauseDuration},
           last_pause_start = NULL
       WHERE id = ${parseInt(id)}
       RETURNING *
+    `;
+
+    // Update resumed_at on the last pause_log
+    await sql`
+      UPDATE pause_logs
+      SET resumed_at = NOW()
+      WHERE id = (
+        SELECT id FROM pause_logs
+        WHERE production_record_id = ${parseInt(id)} AND resumed_at IS NULL
+        ORDER BY paused_at DESC
+        LIMIT 1
+      )
     `;
 
     return NextResponse.json({ record: updated[0] });
@@ -91,8 +111,8 @@ export async function PATCH(
     }
 
     const updated = await sql`
-      UPDATE production_records 
-      SET status = 'FINALIZADO', 
+      UPDATE production_records
+      SET status = 'FINALIZADO',
           end_time = NOW(),
           total_pause_ms = COALESCE(total_pause_ms, 0) + ${extraPause},
           last_pause_start = NULL,
@@ -100,6 +120,25 @@ export async function PATCH(
       WHERE id = ${parseInt(id)}
       RETURNING *
     `;
+
+    // Handle project status changes
+    if (record.project_id) {
+      if (complete_project) {
+        // Finalize the project
+        await sql`
+          UPDATE projects
+          SET status = 'FINALIZADO', completed_at = NOW()
+          WHERE id = ${record.project_id}
+        `;
+      } else {
+        // Return project to PENDENTE for next operation
+        await sql`
+          UPDATE projects
+          SET status = 'PENDENTE'
+          WHERE id = ${record.project_id}
+        `;
+      }
+    }
 
     return NextResponse.json({ record: updated[0] });
   }

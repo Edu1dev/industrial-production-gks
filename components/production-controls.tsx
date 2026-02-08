@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react"
+import React, { useEffect } from "react";
 
 import { useState } from "react";
 import { toast } from "sonner";
@@ -208,14 +208,14 @@ export function StartProductionForm({
   });
 
   // Fetch operations on mount
-  useState(() => {
+  useEffect(() => {
     fetch("/api/operations")
       .then((res) => res.json())
       .then((data) => {
         if (data.operations) setOperations(data.operations);
       })
       .catch(() => {});
-  });
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

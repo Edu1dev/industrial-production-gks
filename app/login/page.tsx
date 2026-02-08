@@ -61,7 +61,7 @@ export default function LoginPage() {
           </div>
           <div className="text-center">
             <h1 className="text-3xl font-bold tracking-tight text-primary-foreground">
-              ProTrack
+              GKS
             </h1>
             <p className="mt-1 text-sm text-primary-foreground/70">
               Sistema de Apontamento de Producao

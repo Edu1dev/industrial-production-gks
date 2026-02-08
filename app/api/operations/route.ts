@@ -14,10 +14,56 @@ export async function GET() {
   return NextResponse.json({ operations });
 }
 
+export async function PATCH(request: Request) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+  }
+
+  if (!session.is_admin) {
+    return NextResponse.json(
+      { error: "Acesso negado: apenas administradores podem alterar operações" },
+      { status: 403 }
+    );
+  }
+
+  const { id, machine_cost_per_hour } = await request.json();
+  if (!id || machine_cost_per_hour == null) {
+    return NextResponse.json(
+      { error: "ID e custo por hora sao obrigatorios" },
+      { status: 400 },
+    );
+  }
+
+  const sql = getDb();
+  const result = await sql`
+    UPDATE operations
+    SET machine_cost_per_hour = ${machine_cost_per_hour}
+    WHERE id = ${id}
+    RETURNING id, name, machine_cost_per_hour
+  `;
+
+  if (result.length === 0) {
+    return NextResponse.json(
+      { error: "Operacao nao encontrada" },
+      { status: 404 },
+    );
+  }
+
+  return NextResponse.json({ operation: result[0] });
+}
+
 export async function POST(request: Request) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+  }
+
+  if (!session.is_admin) {
+    return NextResponse.json(
+      { error: "Acesso negado: apenas administradores podem criar operações" },
+      { status: 403 }
+    );
   }
 
   const { name, machine_cost_per_hour } = await request.json();

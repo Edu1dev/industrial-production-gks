@@ -1,3 +1,10 @@
+-- Companies table
+CREATE TABLE IF NOT EXISTS companies (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Operators table
 CREATE TABLE IF NOT EXISTS operators (
   id SERIAL PRIMARY KEY,
@@ -10,9 +17,10 @@ CREATE TABLE IF NOT EXISTS operators (
 -- Parts table
 CREATE TABLE IF NOT EXISTS parts (
   id SERIAL PRIMARY KEY,
-  code VARCHAR(100) NOT NULL UNIQUE,
+  code VARCHAR(100) NOT NULL,
   description TEXT,
   material_cost DECIMAL(12,2) DEFAULT 0,
+  company_id INTEGER REFERENCES companies(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -59,4 +67,7 @@ ON CONFLICT (login) DO UPDATE SET password_hash = EXCLUDED.password_hash;
 CREATE INDEX IF NOT EXISTS idx_production_records_part_id ON production_records(part_id);
 CREATE INDEX IF NOT EXISTS idx_production_records_operator_id ON production_records(operator_id);
 CREATE INDEX IF NOT EXISTS idx_production_records_status ON production_records(status);
-CREATE INDEX IF NOT EXISTS idx_parts_code ON parts(code);
+
+-- Partial unique indexes for parts: same code can exist in different companies
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parts_code_company ON parts(code, company_id) WHERE company_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_parts_code_null_company ON parts(code) WHERE company_id IS NULL;

@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Search,
@@ -34,6 +34,8 @@ interface PartData {
   code: string;
   description?: string;
   material_cost: number;
+  company_id?: number;
+  company_name?: string;
 }
 
 function formatDuration(ms: number) {
@@ -79,12 +81,23 @@ function getEvaluation(
   };
 }
 
-export function PartSearch() {
+export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
   const [searchCode, setSearchCode] = useState("");
+  const [searchCompanyId, setSearchCompanyId] = useState("");
+  const [companies, setCompanies] = useState<{ id: number; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [part, setPart] = useState<PartData | null>(null);
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/companies")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.companies) setCompanies(data.companies);
+      })
+      .catch(() => { });
+  }, []);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -93,9 +106,11 @@ export function PartSearch() {
     setLoading(true);
     setSearched(true);
     try {
-      const res = await fetch(
-        `/api/parts?code=${encodeURIComponent(searchCode.toUpperCase())}`,
-      );
+      let url = `/api/parts?code=${encodeURIComponent(searchCode.toUpperCase())}`;
+      if (searchCompanyId) {
+        url += `&company_id=${encodeURIComponent(searchCompanyId)}`;
+      }
+      const res = await fetch(url);
       const data = await res.json();
 
       setPart(data.part || null);
@@ -141,14 +156,26 @@ export function PartSearch() {
         Buscar Peca / Historico
       </h2>
 
-      <form onSubmit={handleSearch} className="mb-4 flex gap-3">
+      <form onSubmit={handleSearch} className="mb-4 flex flex-wrap gap-3">
         <input
           type="text"
           value={searchCode}
           onChange={(e) => setSearchCode(e.target.value.toUpperCase())}
           placeholder="Codigo da peca..."
-          className="h-14 flex-1 rounded-xl border border-input bg-background px-4 font-mono text-xl font-bold text-foreground uppercase placeholder:text-muted-foreground placeholder:font-normal placeholder:text-base focus:outline-none focus:ring-2 focus:ring-accent"
+          className="h-14 flex-1 min-w-[200px] rounded-xl border border-input bg-background px-4 font-mono text-xl font-bold text-foreground uppercase placeholder:text-muted-foreground placeholder:font-normal placeholder:text-base focus:outline-none focus:ring-2 focus:ring-accent"
         />
+        <select
+          value={searchCompanyId}
+          onChange={(e) => setSearchCompanyId(e.target.value)}
+          className="h-14 rounded-xl border border-input bg-background px-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+        >
+          <option value="">Todas empresas</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
         <button
           type="submit"
           disabled={loading}
@@ -177,16 +204,23 @@ export function PartSearch() {
                       - {part.description}
                     </span>
                   )}
+                  {part.company_name && (
+                    <span className="ml-2 text-sm text-accent font-medium">
+                      ({part.company_name})
+                    </span>
+                  )}
                 </div>
-                <span className="text-sm text-muted-foreground">
-                  Custo MP: R$ {Number(part.material_cost).toFixed(2)}
-                </span>
+                {isAdmin && (
+                  <span className="text-sm text-muted-foreground">
+                    Custo MP: R$ {Number(part.material_cost).toFixed(2)}
+                  </span>
+                )}
               </div>
             </div>
           )}
 
-          {/* Comparison Stats */}
-          {hasComparison && (
+          {/* Comparison Stats - Admin Only */}
+          {hasComparison && isAdmin && (
             <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
               <div className="rounded-xl bg-[hsl(var(--success))]/10 p-3 text-center">
                 <Trophy className="mx-auto mb-1 h-5 w-5 text-[hsl(var(--success))]" />
@@ -239,18 +273,24 @@ export function PartSearch() {
                     <th className="px-3 py-2.5 text-center font-semibold text-foreground">
                       Qtd
                     </th>
-                    <th className="px-3 py-2.5 text-center font-semibold text-foreground">
-                      Tempo Total
-                    </th>
-                    <th className="px-3 py-2.5 text-center font-semibold text-foreground">
-                      Tempo/Peca
-                    </th>
+                    {isAdmin && (
+                      <>
+                        <th className="px-3 py-2.5 text-center font-semibold text-foreground">
+                          Tempo Total
+                        </th>
+                        <th className="px-3 py-2.5 text-center font-semibold text-foreground">
+                          Tempo/Peca
+                        </th>
+                      </>
+                    )}
                     <th className="px-3 py-2.5 text-center font-semibold text-foreground">
                       Status
                     </th>
-                    <th className="px-3 py-2.5 text-center font-semibold text-foreground">
-                      Avaliacao
-                    </th>
+                    {isAdmin && (
+                      <th className="px-3 py-2.5 text-center font-semibold text-foreground">
+                        Avaliacao
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -278,21 +318,24 @@ export function PartSearch() {
                         <td className="px-3 py-2.5 text-center text-foreground">
                           {rec.quantity}
                         </td>
-                        <td className="px-3 py-2.5 text-center font-mono text-foreground">
-                          {rec.end_time ? formatDuration(totalTime) : "-"}
-                        </td>
-                        <td className="px-3 py-2.5 text-center font-mono text-foreground">
-                          {rec.end_time ? formatDuration(timePerPiece) : "-"}
-                        </td>
+                        {isAdmin && (
+                          <>
+                            <td className="px-3 py-2.5 text-center font-mono text-foreground">
+                              {rec.end_time ? formatDuration(totalTime) : "-"}
+                            </td>
+                            <td className="px-3 py-2.5 text-center font-mono text-foreground">
+                              {rec.end_time ? formatDuration(timePerPiece) : "-"}
+                            </td>
+                          </>
+                        )}
                         <td className="px-3 py-2.5 text-center">
                           <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                              rec.status === "FINALIZADO"
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${rec.status === "FINALIZADO"
                                 ? "bg-muted text-muted-foreground"
                                 : rec.status === "EM_PRODUCAO"
                                   ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
                                   : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
-                            }`}
+                              }`}
                           >
                             {rec.status === "EM_PRODUCAO"
                               ? "Producao"
@@ -301,20 +344,22 @@ export function PartSearch() {
                                 : "Finalizado"}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-center">
-                          {evaluation && EvalIcon ? (
-                            <span
-                              className={`inline-flex items-center gap-1 text-xs font-bold ${evaluation.color}`}
-                            >
-                              <EvalIcon className="h-3.5 w-3.5" />
-                              {evaluation.label}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              -
-                            </span>
-                          )}
-                        </td>
+                        {isAdmin && (
+                          <td className="px-3 py-2.5 text-center">
+                            {evaluation && EvalIcon ? (
+                              <span
+                                className={`inline-flex items-center gap-1 text-xs font-bold ${evaluation.color}`}
+                              >
+                                <EvalIcon className="h-3.5 w-3.5" />
+                                {evaluation.label}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                -
+                              </span>
+                            )}
+                          </td>
+                        )}
                       </tr>
                     );
                   })}

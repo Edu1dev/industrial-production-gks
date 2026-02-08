@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-import ArrowLeft from "lucide-react/dist/esm/icons/ArrowLeft"; // Added import for ArrowLeft
 import React from "react";
 
 import useSWR from "swr";
@@ -13,6 +11,9 @@ import {
   Loader2,
   DollarSign,
   Settings,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -28,6 +29,9 @@ export default function OperacoesPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", machine_cost_per_hour: "" });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const operations: Operation[] = data?.operations || [];
 
@@ -68,6 +72,45 @@ export default function OperacoesPage() {
     }
   }
 
+  function startEditing(op: Operation) {
+    setEditingId(op.id);
+    setEditValue(Number(op.machine_cost_per_hour).toFixed(2));
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+    setEditValue("");
+  }
+
+  async function handleEditSave(id: number) {
+    setEditSaving(true);
+    try {
+      const res = await fetch("/api/operations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          machine_cost_per_hour: parseFloat(editValue) || 0,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Erro ao atualizar");
+        return;
+      }
+
+      toast.success("Valor/hora atualizado!");
+      setEditingId(null);
+      setEditValue("");
+      mutate();
+    } catch {
+      toast.error("Erro de conexao");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Page Header */}
@@ -75,7 +118,7 @@ export default function OperacoesPage() {
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <Wrench className="h-6 w-6 text-accent" />
-            Operacoes
+            Operações
           </h1>
           <p className="text-sm text-muted-foreground">
             Gerenciar tipos de operacao e custos de maquina
@@ -201,17 +244,76 @@ export default function OperacoesPage() {
                     </p>
                   </div>
                 </div>
+                {editingId !== op.id && (
+                  <button
+                    onClick={() => startEditing(op)}
+                    className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    title="Editar valor/hora"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-2 rounded-xl bg-muted p-3">
                 <DollarSign className="h-5 w-5 text-accent" />
-                <div>
-                  <p className="text-xs text-muted-foreground">
-                    Custo Maquina/Hora
-                  </p>
-                  <p className="font-mono text-lg font-bold text-foreground">
-                    R$ {Number(op.machine_cost_per_hour).toFixed(2)}
-                  </p>
-                </div>
+                {editingId === op.id ? (
+                  <div className="flex flex-1 items-center gap-2">
+                    <div className="flex-1">
+                      <p className="text-xs text-muted-foreground">
+                        Custo Maquina/Hora
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <span className="font-mono text-lg font-bold text-foreground">
+                          R$
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleEditSave(op.id);
+                            if (e.key === "Escape") cancelEditing();
+                          }}
+                          autoFocus
+                          className="w-28 rounded-lg border border-input bg-background px-2 py-1 font-mono text-lg font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleEditSave(op.id)}
+                        disabled={editSaving}
+                        className="rounded-lg bg-[hsl(var(--success))] p-2 text-[hsl(var(--success-foreground))] transition-colors hover:opacity-90 disabled:opacity-50"
+                        title="Salvar"
+                      >
+                        {editSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </button>
+                      <button
+                        onClick={cancelEditing}
+                        disabled={editSaving}
+                        className="rounded-lg bg-muted-foreground/20 p-2 text-muted-foreground transition-colors hover:bg-muted-foreground/30 disabled:opacity-50"
+                        title="Cancelar"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-muted-foreground">
+                      Custo Maquina/Hora
+                    </p>
+                    <p className="font-mono text-lg font-bold text-foreground">
+                      R$ {Number(op.machine_cost_per_hour).toFixed(2)}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           ))}

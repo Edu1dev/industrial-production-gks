@@ -34,7 +34,18 @@ export async function GET() {
           (EXTRACT(EPOCH FROM (pr.end_time - pr.start_time)) * 1000 - COALESCE(pr.total_pause_ms, 0)) / pr.quantity / 60000
         END
       )::numeric, 2) as worst_time_per_piece_min,
-      SUM(CASE WHEN pr.status = 'FINALIZADO' THEN pr.quantity ELSE 0 END) as total_pieces
+      COALESCE((
+        SELECT SUM(DISTINCT_PIECES.quantity) FROM (
+          SELECT DISTINCT ON (COALESCE(pr2.group_id::text, pr2.id::text))
+            CASE 
+              WHEN pr2.group_id IS NOT NULL THEN pr2.quantity
+              ELSE pr2.quantity
+            END as quantity
+          FROM production_records pr2
+          WHERE pr2.operator_id = op.id 
+            AND pr2.status = 'FINALIZADO'
+        ) AS DISTINCT_PIECES
+      ), 0) as total_pieces
     FROM operators op
     LEFT JOIN production_records pr ON op.id = pr.operator_id
     GROUP BY op.id, op.name, op.login, op.created_at

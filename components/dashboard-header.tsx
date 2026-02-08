@@ -10,26 +10,32 @@ import {
   Users,
   Wrench,
   History,
+  Building2,
   Menu,
   X,
 } from "lucide-react";
 import { useState } from "react";
 
 interface DashboardHeaderProps {
-  operator: { id: number; name: string; login: string };
+  operator: { id: number; name: string; login: string; is_admin: boolean };
 }
-
-const navItems = [
-  { href: "/dashboard", label: "Producao", icon: Activity },
-  { href: "/dashboard/operadores", label: "Operadores", icon: Users },
-  { href: "/dashboard/operacoes", label: "Operacoes", icon: Wrench },
-  { href: "/dashboard/historico", label: "Historico", icon: History },
-];
 
 export function DashboardHeader({ operator }: DashboardHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const navItems = [
+    { href: "/dashboard", label: "Producao", icon: Activity, adminOnly: false },
+    { href: "/dashboard/operadores", label: "Operadores", icon: Users, adminOnly: true },
+    { href: "/dashboard/operacoes", label: "Operacoes", icon: Wrench, adminOnly: true },
+    { href: "/dashboard/empresas", label: "Empresas", icon: Building2, adminOnly: true },
+    { href: "/dashboard/historico", label: "Historico", icon: History, adminOnly: false },
+  ];
+
+  const visibleNavItems = navItems.filter(
+    (item) => !item.adminOnly || operator.is_admin
+  );
 
   async function handleLogout() {
     try {
@@ -51,7 +57,7 @@ export function DashboardHeader({ operator }: DashboardHeaderProps) {
           </div>
           <div className="hidden sm:block">
             <h1 className="text-lg font-bold leading-tight text-primary-foreground">
-              ProTrack
+              GKS
             </h1>
             <p className="text-xs text-primary-foreground/60">
               Apontamento de Producao
@@ -61,18 +67,17 @@ export function DashboardHeader({ operator }: DashboardHeaderProps) {
 
         {/* Desktop Navigation */}
         <nav className="hidden items-center gap-1 md:flex" aria-label="Navegacao principal">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
               <a
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-                  isActive
-                    ? "bg-primary-foreground/20 text-primary-foreground"
-                    : "text-primary-foreground/60 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                }`}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all ${isActive
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "text-primary-foreground/60 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+                  }`}
               >
                 <Icon className="h-4 w-4" />
                 {item.label}
@@ -118,7 +123,7 @@ export function DashboardHeader({ operator }: DashboardHeaderProps) {
                 {operator.name}
               </span>
             </div>
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               return (
@@ -126,11 +131,10 @@ export function DashboardHeader({ operator }: DashboardHeaderProps) {
                   key={item.href}
                   href={item.href}
                   onClick={() => setMenuOpen(false)}
-                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-base font-medium transition-all ${
-                    isActive
-                      ? "bg-primary-foreground/20 text-primary-foreground"
-                      : "text-primary-foreground/60 hover:bg-primary-foreground/10 hover:text-primary-foreground"
-                  }`}
+                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-base font-medium transition-all ${isActive
+                    ? "bg-primary-foreground/20 text-primary-foreground"
+                    : "text-primary-foreground/60 hover:bg-primary-foreground/10 hover:text-primary-foreground"
+                    }`}
                 >
                   <Icon className="h-5 w-5" />
                   {item.label}

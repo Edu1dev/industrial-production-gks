@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import {
   Factory,
   LogIn,
-  UserPlus,
   Eye,
   EyeOff,
   Loader2,
@@ -16,11 +15,9 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState({
-    name: "",
     login: "",
     password: "",
   });
@@ -30,17 +27,10 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const endpoint =
-        mode === "login" ? "/api/auth/login" : "/api/auth/register";
-      const body =
-        mode === "login"
-          ? { login: form.login, password: form.password }
-          : form;
-
-      const res = await fetch(endpoint, {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(form),
       });
 
       const data = await res.json();
@@ -50,11 +40,7 @@ export default function LoginPage() {
         return;
       }
 
-      toast.success(
-        mode === "login"
-          ? `Bem-vindo, ${data.operator.name}!`
-          : "Conta criada com sucesso!",
-      );
+      toast.success(`Bem-vindo, ${data.operator.name}!`);
 
       // Full page navigation to ensure the cookie is sent with the request
       window.location.href = "/dashboard";
@@ -85,57 +71,11 @@ export default function LoginPage() {
 
         {/* Form Card */}
         <div className="rounded-2xl bg-card p-8 shadow-xl">
-          {/* Mode Toggle */}
-          <div className="mb-6 flex rounded-xl bg-muted p-1">
-            <button
-              type="button"
-              onClick={() => setMode("login")}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition-all ${
-                mode === "login"
-                  ? "bg-card text-card-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-card-foreground"
-              }`}
-            >
-              <LogIn className="h-4 w-4" />
-              Entrar
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("register")}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition-all ${
-                mode === "register"
-                  ? "bg-card text-card-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-card-foreground"
-              }`}
-            >
-              <UserPlus className="h-4 w-4" />
-              Cadastrar
-            </button>
-          </div>
+          <h2 className="mb-6 text-center text-xl font-bold text-card-foreground">
+            Entrar no Sistema
+          </h2>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {mode === "register" && (
-              <div>
-                <label
-                  htmlFor="name"
-                  className="mb-1.5 block text-sm font-medium text-card-foreground"
-                >
-                  Nome Completo
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  required
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm({ ...form, name: e.target.value })
-                  }
-                  placeholder="Ex: Joao Silva"
-                  className="h-14 w-full rounded-xl border border-input bg-background px-4 text-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-              </div>
-            )}
-
             <div>
               <label
                 htmlFor="login"
@@ -197,15 +137,10 @@ export default function LoginPage() {
             >
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
-              ) : mode === "login" ? (
+              ) : (
                 <>
                   <LogIn className="h-5 w-5" />
                   Entrar
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-5 w-5" />
-                  Criar Conta
                 </>
               )}
             </button>

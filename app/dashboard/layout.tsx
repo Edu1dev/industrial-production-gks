@@ -4,6 +4,9 @@ import { getSession } from "@/lib/auth";
 import { DashboardHeader } from "@/components/dashboard-header";
 import { SWRProvider } from "@/components/swr-provider";
 
+// Force dynamic rendering to always check session
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {

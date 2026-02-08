@@ -19,11 +19,13 @@ export async function GET(request: Request) {
     records = await sql`
       SELECT pr.*, p.code as part_code, p.description as part_description, p.material_cost,
              o.name as operation_name, o.machine_cost_per_hour,
-             op.name as operator_name
+             op.name as operator_name,
+             c.name as company_name
       FROM production_records pr
       JOIN parts p ON pr.part_id = p.id
       JOIN operations o ON pr.operation_id = o.id
       JOIN operators op ON pr.operator_id = op.id
+      LEFT JOIN companies c ON p.company_id = c.id
       WHERE pr.status = ${status} AND pr.operator_id = ${parseInt(operatorId)}
       ORDER BY pr.start_time DESC
     `;
@@ -31,11 +33,13 @@ export async function GET(request: Request) {
     records = await sql`
       SELECT pr.*, p.code as part_code, p.description as part_description, p.material_cost,
              o.name as operation_name, o.machine_cost_per_hour,
-             op.name as operator_name
+             op.name as operator_name,
+             c.name as company_name
       FROM production_records pr
       JOIN parts p ON pr.part_id = p.id
       JOIN operations o ON pr.operation_id = o.id
       JOIN operators op ON pr.operator_id = op.id
+      LEFT JOIN companies c ON p.company_id = c.id
       WHERE pr.status = ${status}
       ORDER BY pr.start_time DESC
     `;
@@ -43,11 +47,13 @@ export async function GET(request: Request) {
     records = await sql`
       SELECT pr.*, p.code as part_code, p.description as part_description, p.material_cost,
              o.name as operation_name, o.machine_cost_per_hour,
-             op.name as operator_name
+             op.name as operator_name,
+             c.name as company_name
       FROM production_records pr
       JOIN parts p ON pr.part_id = p.id
       JOIN operations o ON pr.operation_id = o.id
       JOIN operators op ON pr.operator_id = op.id
+      LEFT JOIN companies c ON p.company_id = c.id
       ORDER BY pr.start_time DESC
       LIMIT 50
     `;
@@ -70,6 +76,7 @@ export async function POST(request: Request) {
     expected_time_minutes,
     charged_value,
     material_cost,
+    company_id,
   } = await request.json();
 
   if (!part_code || !operation_id || !quantity) {
@@ -79,17 +86,36 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!company_id) {
+    return NextResponse.json(
+      { error: "Empresa e obrigatoria" },
+      { status: 400 },
+    );
+  }
+
   const sql = getDb();
 
-  // Upsert the part
-  const partResult = await sql`
-    INSERT INTO parts (code, description, material_cost)
-    VALUES (${part_code.toUpperCase()}, ${part_description || null}, ${material_cost || 0})
-    ON CONFLICT (code) DO UPDATE SET
-      description = COALESCE(${part_description || null}, parts.description),
-      material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
-    RETURNING id, code, description, material_cost
-  `;
+  // Upsert the part with company_id
+  let partResult;
+  if (company_id) {
+    partResult = await sql`
+      INSERT INTO parts (code, description, material_cost, company_id)
+      VALUES (${part_code.toUpperCase()}, ${part_description || null}, ${material_cost || 0}, ${company_id})
+      ON CONFLICT (code, company_id) WHERE company_id IS NOT NULL DO UPDATE SET
+        description = COALESCE(${part_description || null}, parts.description),
+        material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
+      RETURNING id, code, description, material_cost, company_id
+    `;
+  } else {
+    partResult = await sql`
+      INSERT INTO parts (code, description, material_cost)
+      VALUES (${part_code.toUpperCase()}, ${part_description || null}, ${material_cost || 0})
+      ON CONFLICT (code) WHERE company_id IS NULL DO UPDATE SET
+        description = COALESCE(${part_description || null}, parts.description),
+        material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
+      RETURNING id, code, description, material_cost, company_id
+    `;
+  }
 
   const part = partResult[0];
 

@@ -10,13 +10,30 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
+  const companyId = searchParams.get("company_id");
 
   const sql = getDb();
 
   if (code) {
-    // Search for a specific part by code
-    const parts =
-      await sql`SELECT id, code, description, material_cost, created_at FROM parts WHERE code = ${code}`;
+    // Search for a specific part by code (optionally filtered by company)
+    let parts;
+    if (companyId) {
+      parts = await sql`
+        SELECT p.id, p.code, p.description, p.material_cost, p.company_id, p.created_at,
+               c.name as company_name
+        FROM parts p
+        LEFT JOIN companies c ON p.company_id = c.id
+        WHERE p.code = ${code} AND p.company_id = ${parseInt(companyId)}
+      `;
+    } else {
+      parts = await sql`
+        SELECT p.id, p.code, p.description, p.material_cost, p.company_id, p.created_at,
+               c.name as company_name
+        FROM parts p
+        LEFT JOIN companies c ON p.company_id = c.id
+        WHERE p.code = ${code}
+      `;
+    }
 
     if (parts.length === 0) {
       return NextResponse.json({ part: null, history: [] });
@@ -26,7 +43,7 @@ export async function GET(request: Request) {
 
     // Get production history for this part
     const history = await sql`
-      SELECT 
+      SELECT
         pr.id, pr.status, pr.quantity, pr.start_time, pr.end_time,
         pr.total_pause_ms, pr.expected_time_minutes, pr.charged_value, pr.notes,
         o.name as operation_name, o.machine_cost_per_hour,
@@ -42,8 +59,13 @@ export async function GET(request: Request) {
   }
 
   // Return all parts
-  const parts =
-    await sql`SELECT id, code, description, material_cost, created_at FROM parts ORDER BY created_at DESC LIMIT 50`;
+  const parts = await sql`
+    SELECT p.id, p.code, p.description, p.material_cost, p.company_id, p.created_at,
+           c.name as company_name
+    FROM parts p
+    LEFT JOIN companies c ON p.company_id = c.id
+    ORDER BY p.created_at DESC LIMIT 50
+  `;
   return NextResponse.json({ parts });
 }
 
@@ -53,7 +75,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
   }
 
-  const { code, description, material_cost } = await request.json();
+  const { code, description, material_cost, company_id } =
+    await request.json();
 
   if (!code) {
     return NextResponse.json(
@@ -64,15 +87,28 @@ export async function POST(request: Request) {
 
   const sql = getDb();
 
-  // Upsert - create if not exists
-  const result = await sql`
-    INSERT INTO parts (code, description, material_cost)
-    VALUES (${code.toUpperCase()}, ${description || null}, ${material_cost || 0})
-    ON CONFLICT (code) DO UPDATE SET
-      description = COALESCE(${description || null}, parts.description),
-      material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
-    RETURNING id, code, description, material_cost
-  `;
+  let result;
+  if (company_id) {
+    // Upsert with company_id - uses partial unique index idx_parts_code_company
+    result = await sql`
+      INSERT INTO parts (code, description, material_cost, company_id)
+      VALUES (${code.toUpperCase()}, ${description || null}, ${material_cost || 0}, ${company_id})
+      ON CONFLICT (code, company_id) WHERE company_id IS NOT NULL DO UPDATE SET
+        description = COALESCE(${description || null}, parts.description),
+        material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
+      RETURNING id, code, description, material_cost, company_id
+    `;
+  } else {
+    // Upsert without company_id - uses partial unique index idx_parts_code_null_company
+    result = await sql`
+      INSERT INTO parts (code, description, material_cost)
+      VALUES (${code.toUpperCase()}, ${description || null}, ${material_cost || 0})
+      ON CONFLICT (code) WHERE company_id IS NULL DO UPDATE SET
+        description = COALESCE(${description || null}, parts.description),
+        material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
+      RETURNING id, code, description, material_cost, company_id
+    `;
+  }
 
   return NextResponse.json({ part: result[0] });
 }

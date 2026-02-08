@@ -11,7 +11,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ProTrack - Apontamento de Producao",
+  title: "GKS - Apontamento de Producao",
   description:
     "Sistema industrial de apontamento de producao, historico por peca e comparacao de desempenho",
 };

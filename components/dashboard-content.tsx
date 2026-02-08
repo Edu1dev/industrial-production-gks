@@ -28,7 +28,11 @@ function formatDuration(ms: number) {
 
 type TabKey = "production" | "search" | "dashboard";
 
-export function DashboardContent() {
+interface DashboardContentProps {
+  operator: { id: number; name: string; login: string; is_admin: boolean } | null;
+}
+
+export function DashboardContent({ operator }: DashboardContentProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("production");
   const {
     data: dashboardData,
@@ -43,27 +47,28 @@ export function DashboardContent() {
   const rankings = dashboardData?.rankings || [];
   const repeatedParts = dashboardData?.repeatedParts || [];
 
-  const tabs: { key: TabKey; label: string; icon: typeof Activity }[] = [
-    { key: "production", label: "Producao", icon: Activity },
-    { key: "search", label: "Buscar Peca", icon: Clock },
-    { key: "dashboard", label: "Dashboard", icon: BarChart3 },
+  const tabs: { key: TabKey; label: string; icon: typeof Activity; adminOnly: boolean }[] = [
+    { key: "production", label: "Producao", icon: Activity, adminOnly: false },
+    { key: "search", label: "Buscar Peca", icon: Clock, adminOnly: false },
+    { key: "dashboard", label: "Dashboard", icon: BarChart3, adminOnly: true },
   ];
+
+  const visibleTabs = tabs.filter(tab => !tab.adminOnly || operator?.is_admin);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Tab Navigation */}
       <div className="mb-6 flex gap-2 overflow-x-auto rounded-xl bg-card p-1.5 shadow-sm">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           return (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-semibold transition-all ${
-                activeTab === tab.key
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg py-3.5 text-sm font-semibold transition-all ${activeTab === tab.key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
             >
               <Icon className="h-4 w-4" />
               {tab.label}
@@ -110,6 +115,7 @@ export function DashboardContent() {
                     expected_time_minutes?: number;
                     charged_value?: number;
                     operator_name: string;
+                    company_name?: string;
                   }) => (
                     <ProductionControls key={record.id} record={record} />
                   ),
@@ -124,7 +130,7 @@ export function DashboardContent() {
       )}
 
       {/* Search Tab */}
-      {activeTab === "search" && <PartSearch />}
+      {activeTab === "search" && <PartSearch isAdmin={!!operator?.is_admin} />}
 
       {/* Dashboard Tab */}
       {activeTab === "dashboard" && (
@@ -175,13 +181,12 @@ export function DashboardContent() {
                         >
                           <td className="px-3 py-2.5">
                             <span
-                              className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                                i === 0
-                                  ? "bg-accent text-accent-foreground"
-                                  : i === 1
-                                    ? "bg-muted text-foreground"
-                                    : "bg-muted text-muted-foreground"
-                              }`}
+                              className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${i === 0
+                                ? "bg-accent text-accent-foreground"
+                                : i === 1
+                                  ? "bg-muted text-foreground"
+                                  : "bg-muted text-muted-foreground"
+                                }`}
                             >
                               {i + 1}
                             </span>
@@ -294,6 +299,9 @@ export function DashboardContent() {
                         Peca
                       </th>
                       <th className="px-3 py-2.5 text-left font-semibold text-foreground">
+                        Empresa
+                      </th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-foreground">
                         Operacao
                       </th>
                       <th className="px-3 py-2.5 text-left font-semibold text-foreground">
@@ -322,6 +330,7 @@ export function DashboardContent() {
                         end_time?: string;
                         total_pause_ms: number;
                         status: string;
+                        company_name?: string;
                       }) => {
                         let timeStr = "-";
                         if (rec.end_time) {
@@ -341,6 +350,11 @@ export function DashboardContent() {
                               {rec.part_code}
                             </td>
                             <td className="px-3 py-2.5 text-foreground">
+                              {rec.company_name || (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5 text-foreground">
                               {rec.operation_name}
                             </td>
                             <td className="px-3 py-2.5 text-foreground">
@@ -354,13 +368,12 @@ export function DashboardContent() {
                             </td>
                             <td className="px-3 py-2.5 text-center">
                               <span
-                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                  rec.status === "FINALIZADO"
-                                    ? "bg-muted text-muted-foreground"
-                                    : rec.status === "EM_PRODUCAO"
-                                      ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
-                                      : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
-                                }`}
+                                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${rec.status === "FINALIZADO"
+                                  ? "bg-muted text-muted-foreground"
+                                  : rec.status === "EM_PRODUCAO"
+                                    ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+                                    : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+                                  }`}
                               >
                                 {rec.status === "EM_PRODUCAO"
                                   ? "Producao"

@@ -41,6 +41,8 @@ interface HistoryRecord {
   time_per_piece_min: number | null;
   machine_cost: number | null;
   total_material_cost: number | null;
+  company_name?: string;
+  company_id?: number;
 }
 
 const PAGE_SIZE = 20;
@@ -52,14 +54,17 @@ export default function HistoricoPage() {
     status: "",
     date_from: "",
     date_to: "",
+    company_id: "",
   });
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [page, setPage] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
 
-  // Fetch operators for filter dropdown
+  // Fetch operators and companies for filter dropdowns
   const { data: operatorsData } = useSWR("/api/operators", fetcher);
   const operators = operatorsData?.operators || [];
+  const { data: companiesData } = useSWR("/api/companies", fetcher);
+  const companies = companiesData?.companies || [];
 
   // Build URL with filters
   const buildUrl = useCallback(() => {
@@ -72,6 +77,8 @@ export default function HistoricoPage() {
     if (appliedFilters.date_from)
       params.set("date_from", appliedFilters.date_from);
     if (appliedFilters.date_to) params.set("date_to", appliedFilters.date_to);
+    if (appliedFilters.company_id)
+      params.set("company_id", appliedFilters.company_id);
     params.set("limit", String(PAGE_SIZE));
     params.set("offset", String(page * PAGE_SIZE));
     return `/api/history?${params.toString()}`;
@@ -94,6 +101,7 @@ export default function HistoricoPage() {
       status: "",
       date_from: "",
       date_to: "",
+      company_id: "",
     };
     setFilters(empty);
     setAppliedFilters(empty);
@@ -196,7 +204,33 @@ export default function HistoricoPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label
+                htmlFor="filter_company"
+                className="mb-1.5 block text-sm font-medium text-card-foreground"
+              >
+                Empresa
+              </label>
+              <select
+                id="filter_company"
+                value={filters.company_id}
+                onChange={(e) =>
+                  setFilters({ ...filters, company_id: e.target.value })
+                }
+                className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+              >
+                <option value="">Todas</option>
+                {companies.map(
+                  (c: { id: number; name: string }) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+
             <div>
               <label
                 htmlFor="filter_operator"
@@ -390,6 +424,9 @@ export default function HistoricoPage() {
                     Peca
                   </th>
                   <th className="whitespace-nowrap px-3 py-3 text-left font-semibold text-foreground">
+                    Empresa
+                  </th>
+                  <th className="whitespace-nowrap px-3 py-3 text-left font-semibold text-foreground">
                     Operacao
                   </th>
                   <th className="whitespace-nowrap px-3 py-3 text-left font-semibold text-foreground">
@@ -445,6 +482,11 @@ export default function HistoricoPage() {
                           <p className="max-w-[120px] truncate text-xs text-muted-foreground">
                             {rec.part_description}
                           </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-foreground">
+                        {rec.company_name || (
+                          <span className="text-xs text-muted-foreground">-</span>
                         )}
                       </td>
                       <td className="px-3 py-3 text-foreground">

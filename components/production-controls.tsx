@@ -11,8 +11,10 @@ import {
   Square,
   RotateCcw,
   Loader2,
+  Building2,
 } from "lucide-react";
 import { ProductionTimer } from "./production-timer";
+import { FinishProductionDialog } from "./finish-production-dialog";
 
 interface ProductionRecord {
   id: number;
@@ -30,6 +32,7 @@ interface ProductionRecord {
   expected_time_minutes?: number;
   charged_value?: number;
   operator_name: string;
+  company_name?: string;
 }
 
 interface ProductionControlsProps {
@@ -38,6 +41,7 @@ interface ProductionControlsProps {
 
 export function ProductionControls({ record }: ProductionControlsProps) {
   const [loading, setLoading] = useState<string | null>(null);
+  const [showFinishDialog, setShowFinishDialog] = useState(false);
   const { mutate } = useSWRConfig();
 
   async function handleAction(action: string) {
@@ -70,6 +74,44 @@ export function ProductionControls({ record }: ProductionControlsProps) {
     } finally {
       setLoading(null);
     }
+  }
+
+  async function handleFinishClick() {
+    // Se estiver em produção, pausar primeiro
+    if (record.status === "EM_PRODUCAO") {
+      setLoading("pause");
+      try {
+        const res = await fetch(`/api/production/${record.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "pause" }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          toast.error(data.error || "Erro ao pausar");
+          setLoading(null);
+          return;
+        }
+
+        toast.success("Produção pausada");
+        mutate("/api/dashboard");
+        mutate((key: string) => typeof key === "string" && key.startsWith("/api/production"), undefined, { revalidate: true });
+
+        // Aguardar um momento para o estado atualizar
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch {
+        toast.error("Erro de conexão");
+        setLoading(null);
+        return;
+      } finally {
+        setLoading(null);
+      }
+    }
+
+    // Agora mostrar o diálogo
+    setShowFinishDialog(true);
   }
 
   const statusColors: Record<string, string> = {
@@ -108,6 +150,12 @@ export function ProductionControls({ record }: ProductionControlsProps) {
             <span>Op: {record.operation_name}</span>
             <span>Qtd: {record.quantity}</span>
             <span>Operador: {record.operator_name}</span>
+            {record.company_name && (
+              <span className="flex items-center gap-1">
+                <Building2 className="h-3.5 w-3.5" />
+                {record.company_name}
+              </span>
+            )}
           </div>
         </div>
 
@@ -140,11 +188,11 @@ export function ProductionControls({ record }: ProductionControlsProps) {
                 Pausar
               </button>
               <button
-                onClick={() => handleAction("finish")}
+                onClick={handleFinishClick}
                 disabled={loading !== null}
                 className="flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-destructive text-base font-bold text-destructive-foreground transition-all hover:opacity-90 disabled:opacity-50"
               >
-                {loading === "finish" ? (
+                {loading === "pause" ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <Square className="h-5 w-5" />
@@ -169,21 +217,29 @@ export function ProductionControls({ record }: ProductionControlsProps) {
                 Retomar
               </button>
               <button
-                onClick={() => handleAction("finish")}
+                onClick={handleFinishClick}
                 disabled={loading !== null}
                 className="flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-destructive text-base font-bold text-destructive-foreground transition-all hover:opacity-90 disabled:opacity-50"
               >
-                {loading === "finish" ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Square className="h-5 w-5" />
-                )}
+                <Square className="h-5 w-5" />
                 Finalizar
               </button>
             </>
           )}
         </div>
       )}
+
+      <FinishProductionDialog
+        open={showFinishDialog}
+        onOpenChange={setShowFinishDialog}
+        recordId={record.id}
+        partCode={record.part_code}
+        operationName={record.operation_name}
+        onFinished={() => {
+          mutate("/api/dashboard");
+          mutate((key: string) => typeof key === "string" && key.startsWith("/api/production"), undefined, { revalidate: true });
+        }}
+      />
     </div>
   );
 }
@@ -197,30 +253,46 @@ export function StartProductionForm({
   const [operations, setOperations] = useState<
     { id: number; name: string; machine_cost_per_hour: number }[]
   >([]);
+  const [companies, setCompanies] = useState<
+    { id: number; name: string }[]
+  >([]);
   const [form, setForm] = useState({
     part_code: "",
     part_description: "",
     operation_id: "",
+    company_id: "",
     quantity: "1",
     expected_time_minutes: "",
     charged_value: "",
     material_cost: "",
   });
 
-  // Fetch operations on mount
+  // Fetch operations and companies on mount
   useEffect(() => {
     fetch("/api/operations")
       .then((res) => res.json())
       .then((data) => {
         if (data.operations) setOperations(data.operations);
       })
-      .catch(() => {});
+      .catch(() => { });
+
+    fetch("/api/companies")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.companies) setCompanies(data.companies);
+      })
+      .catch(() => { });
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.part_code || !form.operation_id || !form.quantity) {
       toast.error("Preencha codigo da peca, operacao e quantidade");
+      return;
+    }
+
+    if (!form.company_id) {
+      toast.error("Selecione uma empresa");
       return;
     }
 
@@ -233,6 +305,7 @@ export function StartProductionForm({
           part_code: form.part_code,
           part_description: form.part_description || null,
           operation_id: parseInt(form.operation_id),
+          company_id: parseInt(form.company_id),
           quantity: parseInt(form.quantity),
           expected_time_minutes: form.expected_time_minutes
             ? parseFloat(form.expected_time_minutes)
@@ -258,6 +331,7 @@ export function StartProductionForm({
         part_code: "",
         part_description: "",
         operation_id: "",
+        company_id: "",
         quantity: "1",
         expected_time_minutes: "",
         charged_value: "",
@@ -320,6 +394,31 @@ export function StartProductionForm({
             placeholder="Descricao opcional"
             className="h-14 w-full rounded-xl border border-input bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
           />
+        </div>
+
+        <div>
+          <label
+            htmlFor="company"
+            className="mb-1.5 block text-sm font-medium text-card-foreground"
+          >
+            Empresa *
+          </label>
+          <select
+            id="company"
+            required
+            value={form.company_id}
+            onChange={(e) =>
+              setForm({ ...form, company_id: e.target.value })
+            }
+            className="h-14 w-full rounded-xl border border-input bg-background px-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+          >
+            <option value="">Selecione...</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div>

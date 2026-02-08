@@ -41,7 +41,7 @@ export default function OperadoresPage() {
   const [showForm, setShowForm] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [form, setForm] = useState({ name: "", login: "", password: "" });
+  const [form, setForm] = useState({ name: "", login: "", password: "", is_admin: false });
 
   const operators: Operator[] = data?.operators || [];
 
@@ -80,7 +80,7 @@ export default function OperadoresPage() {
       }
 
       toast.success(`Operador "${form.name}" cadastrado com sucesso!`);
-      setForm({ name: "", login: "", password: "" });
+      setForm({ name: "", login: "", password: "", is_admin: false });
       setShowForm(false);
       mutate();
     } catch {
@@ -190,6 +190,25 @@ export default function OperadoresPage() {
                 </button>
               </div>
             </div>
+          </div>
+
+          {/* Admin Checkbox */}
+          <div className="mt-4 flex items-center gap-3 rounded-xl border border-border bg-muted/50 p-4">
+            <input
+              id="is_admin"
+              type="checkbox"
+              checked={form.is_admin}
+              onChange={(e) => setForm({ ...form, is_admin: e.target.checked })}
+              className="h-5 w-5 rounded border-input text-accent focus:ring-2 focus:ring-accent"
+            />
+            <label htmlFor="is_admin" className="flex-1 cursor-pointer">
+              <span className="block text-sm font-semibold text-card-foreground">
+                Administrador
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Admins podem criar empresas, operadores e alterar configurações
+              </span>
+            </label>
           </div>
           <div className="mt-4 flex gap-3">
             <button
@@ -362,13 +381,12 @@ export default function OperadoresPage() {
                       <td className="px-4 py-3">
                         {rank >= 0 ? (
                           <span
-                            className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                              rank === 0
+                            className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${rank === 0
                                 ? "bg-accent text-accent-foreground"
                                 : rank === 1
                                   ? "bg-muted-foreground/20 text-foreground"
                                   : "bg-muted text-muted-foreground"
-                            }`}
+                              }`}
                           >
                             {rank + 1}
                           </span>

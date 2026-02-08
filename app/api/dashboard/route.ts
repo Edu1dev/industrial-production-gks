@@ -10,35 +10,49 @@ export async function GET() {
 
   const sql = getDb();
 
-  // Recent production records
-  const recentRecords = await sql`
-    SELECT pr.*, p.code as part_code, p.description as part_description, p.material_cost,
-           o.name as operation_name, o.machine_cost_per_hour,
-           op.name as operator_name, op.id as operator_id
-    FROM production_records pr
-    JOIN parts p ON pr.part_id = p.id
-    JOIN operations o ON pr.operation_id = o.id
-    JOIN operators op ON pr.operator_id = op.id
-    ORDER BY pr.start_time DESC
-    LIMIT 20
-  `;
-
   // Active/paused records for current operator
   const activeRecords = await sql`
     SELECT pr.*, p.code as part_code, p.description as part_description, p.material_cost,
            o.name as operation_name, o.machine_cost_per_hour,
-           op.name as operator_name
+           op.name as operator_name,
+           c.name as company_name
     FROM production_records pr
     JOIN parts p ON pr.part_id = p.id
     JOIN operations o ON pr.operation_id = o.id
     JOIN operators op ON pr.operator_id = op.id
+    LEFT JOIN companies c ON p.company_id = c.id
     WHERE pr.status IN ('EM_PRODUCAO', 'PAUSADO') AND pr.operator_id = ${session.id}
     ORDER BY pr.start_time DESC
   `;
 
+  // If not admin, return only active records
+  if (!session.is_admin) {
+    return NextResponse.json({
+      recentRecords: [],
+      activeRecords,
+      rankings: [],
+      repeatedParts: [],
+    });
+  }
+
+  // Recent production records
+  const recentRecords = await sql`
+    SELECT pr.*, p.code as part_code, p.description as part_description, p.material_cost,
+           o.name as operation_name, o.machine_cost_per_hour,
+           op.name as operator_name, op.id as operator_id,
+           c.name as company_name
+    FROM production_records pr
+    JOIN parts p ON pr.part_id = p.id
+    JOIN operations o ON pr.operation_id = o.id
+    JOIN operators op ON pr.operator_id = op.id
+    LEFT JOIN companies c ON p.company_id = c.id
+    ORDER BY pr.start_time DESC
+    LIMIT 20
+  `;
+
   // Operator rankings - average time per piece for finished records
   const rankings = await sql`
-    SELECT 
+    SELECT
       op.id as operator_id,
       op.name as operator_name,
       COUNT(pr.id) as total_records,
@@ -61,7 +75,7 @@ export async function GET() {
 
   // Parts with multiple productions (repeated parts)
   const repeatedParts = await sql`
-    SELECT 
+    SELECT
       p.code as part_code,
       p.description,
       COUNT(pr.id) as production_count,

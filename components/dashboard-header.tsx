@@ -20,10 +20,10 @@ interface DashboardHeaderProps {
 }
 
 const navItems = [
-  { href: "/", label: "Producao", icon: Activity },
-  { href: "/operadores", label: "Operadores", icon: Users },
-  { href: "/operacoes", label: "Operacoes", icon: Wrench },
-  { href: "/historico", label: "Historico", icon: History },
+  { href: "/dashboard", label: "Producao", icon: Activity },
+  { href: "/dashboard/operadores", label: "Operadores", icon: Users },
+  { href: "/dashboard/operacoes", label: "Operacoes", icon: Wrench },
+  { href: "/dashboard/historico", label: "Historico", icon: History },
 ];
 
 export function DashboardHeader({ operator }: DashboardHeaderProps) {
@@ -32,10 +32,13 @@ export function DashboardHeader({ operator }: DashboardHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    toast.success("Sessao encerrada");
-    router.push("/login");
-    router.refresh();
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+      toast.success("Sessao encerrada");
+    } finally {
+      router.push("/login");
+      router.refresh();
+    }
   }
 
   return (

@@ -55,7 +55,7 @@ export default function LoginPage() {
           ? `Bem-vindo, ${data.operator.name}!`
           : "Conta criada com sucesso!",
       );
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     } catch {
       toast.error("Erro de conexao");

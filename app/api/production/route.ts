@@ -2,6 +2,55 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
+// Helper: Create clock-in time record when production starts
+async function createClockInRecord(
+  sql: ReturnType<typeof getDb>,
+  operatorId: number,
+  partCode: string,
+  productionRecordId: number
+) {
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+
+  // Check if operator has an OPEN time record today (no clock_out)
+  const openRecords = await sql`
+    SELECT id FROM time_records 
+    WHERE operator_id = ${operatorId} 
+      AND record_date = ${today}
+      AND clock_out IS NULL
+    LIMIT 1
+  `;
+
+  // If there's already an open record, don't create a new one
+  if (openRecords.length > 0) {
+    return null;
+  }
+
+  // Check if this is the first record of the day or resuming after "Fim do turno"
+  const lastRecord = await sql`
+    SELECT id, reason FROM time_records 
+    WHERE operator_id = ${operatorId} 
+      AND record_date = ${today}
+    ORDER BY clock_in DESC
+    LIMIT 1
+  `;
+
+  // Apply -5 minutes adjustment only on first start of the day OR after Fim do turno
+  let clockIn = now;
+  if (lastRecord.length === 0 || lastRecord[0].reason === "Fim do turno") {
+    clockIn = new Date(now.getTime() - 5 * 60 * 1000); // -5 minutes
+  }
+
+  // Create clock-in record
+  const result = await sql`
+    INSERT INTO time_records (operator_id, record_date, clock_in, part_code, production_record_id)
+    VALUES (${operatorId}, ${today}, ${clockIn.toISOString()}, ${partCode}, ${productionRecordId})
+    RETURNING *
+  `;
+
+  return result[0];
+}
+
 export async function GET(request: Request) {
   const session = await getSession();
   if (!session) {
@@ -133,6 +182,14 @@ export async function POST(request: Request) {
         UPDATE projects SET status = 'EM_PRODUCAO' WHERE id = ${project_id}
       `;
 
+      // Create clock-in time record
+      try {
+        await createClockInRecord(sql, session.id, part.code, record[0].id);
+      } catch (e) {
+        console.error("Failed to create time record:", e);
+        // Don't fail production start if time record fails
+      }
+
       return NextResponse.json({ record: record[0], part });
     } catch (error: any) {
       console.error("Start production from project error:", error);
@@ -201,6 +258,14 @@ export async function POST(request: Request) {
     VALUES (${part.id}, ${operation_id}, ${session.id}, ${quantity}, ${expected_time_minutes || null}, ${charged_value || 0}, 'EM_PRODUCAO', NOW())
     RETURNING *
   `;
+
+  // Create clock-in time record
+  try {
+    await createClockInRecord(sql, session.id, part.code, record[0].id);
+  } catch (e) {
+    console.error("Failed to create time record:", e);
+    // Don't fail production start if time record fails
+  }
 
   return NextResponse.json({ record: record[0], part });
 }

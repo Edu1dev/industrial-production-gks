@@ -18,9 +18,16 @@ import {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+const MACHINE_COST_FACTOR = 1.667;
+
+function calcMachineCost(baseCost: number): number {
+  return Math.round(baseCost * MACHINE_COST_FACTOR * 100) / 100;
+}
+
 interface Operation {
   id: number;
   name: string;
+  base_cost_per_hour: number;
   machine_cost_per_hour: number;
 }
 
@@ -28,12 +35,18 @@ export default function OperacoesPage() {
   const { data, mutate, isLoading } = useSWR("/api/operations", fetcher);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", machine_cost_per_hour: "" });
+  const [form, setForm] = useState({ name: "", base_cost_per_hour: "" });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editSaving, setEditSaving] = useState(false);
 
   const operations: Operation[] = data?.operations || [];
+
+  const formBaseCost = parseFloat(form.base_cost_per_hour) || 0;
+  const formMachineCost = calcMachineCost(formBaseCost);
+
+  const editBaseCost = parseFloat(editValue) || 0;
+  const editMachineCost = calcMachineCost(editBaseCost);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,9 +62,7 @@ export default function OperacoesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name,
-          machine_cost_per_hour: form.machine_cost_per_hour
-            ? parseFloat(form.machine_cost_per_hour)
-            : 0,
+          base_cost_per_hour: formBaseCost,
         }),
       });
 
@@ -62,7 +73,7 @@ export default function OperacoesPage() {
       }
 
       toast.success(`Operacao "${form.name}" salva com sucesso!`);
-      setForm({ name: "", machine_cost_per_hour: "" });
+      setForm({ name: "", base_cost_per_hour: "" });
       setShowForm(false);
       mutate();
     } catch {
@@ -74,7 +85,7 @@ export default function OperacoesPage() {
 
   function startEditing(op: Operation) {
     setEditingId(op.id);
-    setEditValue(Number(op.machine_cost_per_hour).toFixed(2));
+    setEditValue(Number(op.base_cost_per_hour).toFixed(2));
   }
 
   function cancelEditing() {
@@ -90,7 +101,7 @@ export default function OperacoesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id,
-          machine_cost_per_hour: parseFloat(editValue) || 0,
+          base_cost_per_hour: editBaseCost,
         }),
       });
 
@@ -162,23 +173,29 @@ export default function OperacoesPage() {
             </div>
             <div>
               <label
-                htmlFor="op_cost"
+                htmlFor="op_base_cost"
                 className="mb-1.5 block text-sm font-medium text-card-foreground"
               >
-                Custo por Hora (R$)
+                Custo Base/Hora (R$)
               </label>
               <input
-                id="op_cost"
+                id="op_base_cost"
                 type="number"
                 min="0"
                 step="0.01"
-                value={form.machine_cost_per_hour}
+                value={form.base_cost_per_hour}
                 onChange={(e) =>
-                  setForm({ ...form, machine_cost_per_hour: e.target.value })
+                  setForm({ ...form, base_cost_per_hour: e.target.value })
                 }
                 placeholder="0.00"
                 className="h-14 w-full rounded-xl border border-input bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
               />
+              {formBaseCost > 0 && (
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Custo Maquina/Hora: <span className="font-semibold text-foreground">R$ {formMachineCost.toFixed(2)}</span>
+                  <span className="ml-1 text-xs">(x 1.667)</span>
+                </p>
+              )}
             </div>
           </div>
           <div className="mt-4 flex gap-3">
@@ -248,7 +265,7 @@ export default function OperacoesPage() {
                   <button
                     onClick={() => startEditing(op)}
                     className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    title="Editar valor/hora"
+                    title="Editar custo base/hora"
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
@@ -260,7 +277,7 @@ export default function OperacoesPage() {
                   <div className="flex flex-1 items-center gap-2">
                     <div className="flex-1">
                       <p className="text-xs text-muted-foreground">
-                        Custo Maquina/Hora
+                        Custo Base/Hora
                       </p>
                       <div className="flex items-center gap-1">
                         <span className="font-mono text-lg font-bold text-foreground">
@@ -280,6 +297,11 @@ export default function OperacoesPage() {
                           className="w-28 rounded-lg border border-input bg-background px-2 py-1 font-mono text-lg font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                       </div>
+                      {editBaseCost > 0 && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Maquina/Hora: R$ {editMachineCost.toFixed(2)} <span className="text-[10px]">(x 1.667)</span>
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-1">
                       <button
@@ -305,13 +327,25 @@ export default function OperacoesPage() {
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <p className="text-xs text-muted-foreground">
-                      Custo Maquina/Hora
-                    </p>
-                    <p className="font-mono text-lg font-bold text-foreground">
-                      R$ {Number(op.machine_cost_per_hour).toFixed(2)}
-                    </p>
+                  <div className="flex-1">
+                    <div className="flex items-baseline justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">
+                          Custo Base/Hora
+                        </p>
+                        <p className="font-mono text-lg font-bold text-foreground">
+                          R$ {Number(op.base_cost_per_hour).toFixed(2)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">
+                          Maquina/Hora <span className="text-[10px]">(x 1.667)</span>
+                        </p>
+                        <p className="font-mono text-lg font-bold text-accent">
+                          R$ {Number(op.machine_cost_per_hour).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

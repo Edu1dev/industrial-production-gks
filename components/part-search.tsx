@@ -8,10 +8,6 @@ import {
   Search,
   Loader2,
   Clock,
-  Trophy,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 
 interface HistoryRecord {
@@ -53,33 +49,7 @@ function calculateProductionTime(record: HistoryRecord): number {
   return end - start - (record.total_pause_ms || 0);
 }
 
-function getEvaluation(
-  record: HistoryRecord,
-): { label: string; color: string; icon: typeof CheckCircle2 } | null {
-  if (!record.expected_time_minutes || !record.end_time) return null;
-  const actualMinutes = calculateProductionTime(record) / 60000;
-  const expectedMinutes = Number(record.expected_time_minutes);
-
-  if (actualMinutes < expectedMinutes * 0.9) {
-    return {
-      label: "EXCELENTE",
-      color: "text-[hsl(var(--success))]",
-      icon: CheckCircle2,
-    };
-  }
-  if (actualMinutes <= expectedMinutes * 1.1) {
-    return {
-      label: "BOM",
-      color: "text-[hsl(var(--chart-1))]",
-      icon: Trophy,
-    };
-  }
-  return {
-    label: "PESSIMO",
-    color: "text-destructive",
-    icon: XCircle,
-  };
-}
+const TARGET_PER_MIN = 1.667; // Fixed business factor
 
 export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
   const [searchCode, setSearchCode] = useState("");
@@ -126,28 +96,8 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  // Calculate comparison stats for repeated parts
+  // Calculate finished records for profitability summary
   const finishedRecords = history.filter((r) => r.status === "FINALIZADO");
-  const hasComparison = finishedRecords.length > 1;
-
-  let bestTime = Infinity;
-  let worstTime = 0;
-  let bestOperator = "";
-  let worstOperator = "";
-
-  if (hasComparison) {
-    for (const rec of finishedRecords) {
-      const time = calculateProductionTime(rec) / rec.quantity;
-      if (time < bestTime) {
-        bestTime = time;
-        bestOperator = rec.operator_name;
-      }
-      if (time > worstTime) {
-        worstTime = time;
-        worstOperator = rec.operator_name;
-      }
-    }
-  }
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -219,41 +169,102 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
             </div>
           )}
 
-          {/* Comparison Stats - Admin Only */}
-          {hasComparison && isAdmin && (
-            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded-xl bg-[hsl(var(--success))]/10 p-3 text-center">
-                <Trophy className="mx-auto mb-1 h-5 w-5 text-[hsl(var(--success))]" />
-                <p className="text-xs text-muted-foreground">Melhor Tempo/Peca</p>
-                <p className="font-mono text-sm font-bold text-foreground">
-                  {formatDuration(bestTime)}
+          {/* Part-Level Profitability Summary - Admin Only */}
+          {isAdmin && finishedRecords.length > 0 && (() => {
+            // Calculate totals for the Part
+            const totalTimeMs = finishedRecords.reduce((acc, rec) => acc + calculateProductionTime(rec), 0);
+            const totalTimeMin = totalTimeMs / 60000;
+            const totalQuantity = finishedRecords.reduce((acc, rec) => acc + rec.quantity, 0);
+            const totalCharged = finishedRecords.reduce((acc, rec) => acc + Number(rec.charged_value || 0), 0);
+            const realPerMin = totalTimeMin > 0 ? totalCharged / totalTimeMin : 0;
+            const allFinished = history.every(r => r.status === "FINALIZADO");
+
+            return (
+              <div className="mb-4 rounded-xl border border-border bg-muted/40 p-4">
+                <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                  Resumo da Peça
                 </p>
-                <p className="text-xs text-[hsl(var(--success))]">
-                  {bestOperator}
-                </p>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div>
+                    <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                      Tempo Total
+                    </p>
+                    <p className="font-mono text-sm font-medium text-foreground">
+                      {totalTimeMin.toFixed(2)} min
+                    </p>
+                  </div>
+                  <div className="h-8 w-px bg-border"></div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                      Qtd Total
+                    </p>
+                    <p className="font-mono text-sm font-bold text-foreground">
+                      {totalQuantity}
+                    </p>
+                  </div>
+                  <div className="h-8 w-px bg-border"></div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                      Valor Cobrado
+                    </p>
+                    <p className="font-mono text-sm font-bold text-accent">
+                      R$ {totalCharged.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="h-8 w-px bg-border"></div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                      Real / Min
+                    </p>
+                    <p className={`font-mono text-sm font-bold ${allFinished && totalTimeMin > 0
+                      ? realPerMin < TARGET_PER_MIN - 0.01
+                        ? "text-destructive"
+                        : realPerMin > TARGET_PER_MIN + 0.01
+                          ? "text-emerald-500"
+                          : "text-foreground"
+                      : "text-foreground"
+                      }`}>
+                      R$ {realPerMin.toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                      Meta / Min
+                    </p>
+                    <p className="font-mono text-sm text-muted-foreground">
+                      R$ {TARGET_PER_MIN.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="ml-auto">
+                    {totalTimeMin === 0 ? (
+                      <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                        📊 Sem dados suficientes
+                      </span>
+                    ) : allFinished ? (
+                      realPerMin < TARGET_PER_MIN - 0.01 ? (
+                        <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">
+                          ❌ Ruim
+                        </span>
+                      ) : realPerMin > TARGET_PER_MIN + 0.01 ? (
+                        <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-500">
+                          🔥 Excelente
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
+                          ✅ Bom
+                        </span>
+                      )
+                    ) : (
+                      <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                        ⏳ Em andamento
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="rounded-xl bg-destructive/10 p-3 text-center">
-                <AlertTriangle className="mx-auto mb-1 h-5 w-5 text-destructive" />
-                <p className="text-xs text-muted-foreground">Pior Tempo/Peca</p>
-                <p className="font-mono text-sm font-bold text-foreground">
-                  {formatDuration(worstTime)}
-                </p>
-                <p className="text-xs text-destructive">{worstOperator}</p>
-              </div>
-              <div className="rounded-xl bg-accent/10 p-3 text-center">
-                <CheckCircle2 className="mx-auto mb-1 h-5 w-5 text-accent" />
-                <p className="text-xs text-muted-foreground">Mais Rapido</p>
-                <p className="text-sm font-bold text-foreground">{bestOperator}</p>
-              </div>
-              <div className="rounded-xl bg-muted p-3 text-center">
-                <Clock className="mx-auto mb-1 h-5 w-5 text-muted-foreground" />
-                <p className="text-xs text-muted-foreground">Mais Lento</p>
-                <p className="text-sm font-bold text-foreground">
-                  {worstOperator}
-                </p>
-              </div>
-            </div>
-          )}
+            );
+          })()}
+
 
           {/* History Table */}
           {history.length > 0 ? (
@@ -286,11 +297,6 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
                     <th className="px-3 py-2.5 text-center font-semibold text-foreground">
                       Status
                     </th>
-                    {isAdmin && (
-                      <th className="px-3 py-2.5 text-center font-semibold text-foreground">
-                        Avaliacao
-                      </th>
-                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -298,8 +304,6 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
                     const totalTime = calculateProductionTime(rec);
                     const timePerPiece =
                       rec.quantity > 0 ? totalTime / rec.quantity : 0;
-                    const evaluation = getEvaluation(rec);
-                    const EvalIcon = evaluation?.icon;
 
                     return (
                       <tr
@@ -331,10 +335,10 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
                         <td className="px-3 py-2.5 text-center">
                           <span
                             className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${rec.status === "FINALIZADO"
-                                ? "bg-muted text-muted-foreground"
-                                : rec.status === "EM_PRODUCAO"
-                                  ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
-                                  : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+                              ? "bg-muted text-muted-foreground"
+                              : rec.status === "EM_PRODUCAO"
+                                ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+                                : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
                               }`}
                           >
                             {rec.status === "EM_PRODUCAO"
@@ -344,22 +348,6 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
                                 : "Finalizado"}
                           </span>
                         </td>
-                        {isAdmin && (
-                          <td className="px-3 py-2.5 text-center">
-                            {evaluation && EvalIcon ? (
-                              <span
-                                className={`inline-flex items-center gap-1 text-xs font-bold ${evaluation.color}`}
-                              >
-                                <EvalIcon className="h-3.5 w-3.5" />
-                                {evaluation.label}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                -
-                              </span>
-                            )}
-                          </td>
-                        )}
                       </tr>
                     );
                   })}

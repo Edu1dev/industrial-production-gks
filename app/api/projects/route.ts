@@ -70,7 +70,7 @@ export async function POST(request: Request) {
     company_id,
     quantity,
     description,
-    estimated_time_hours,
+    estimated_time_minutes,
     charged_value_per_piece,
     material_cost,
   } = await request.json();
@@ -93,8 +93,8 @@ export async function POST(request: Request) {
 
   try {
     const project = await sql`
-      INSERT INTO projects (part_code, company_id, quantity, description, estimated_time_hours, charged_value_per_piece, material_cost, created_by)
-      VALUES (${part_code.toUpperCase()}, ${company_id}, ${quantity}, ${description}, ${estimated_time_hours || null}, ${charged_value_per_piece || 0}, ${material_cost || 0}, ${session.id})
+      INSERT INTO projects (part_code, company_id, quantity, description, estimated_time_minutes, charged_value_per_piece, material_cost, created_by)
+      VALUES (${part_code.toUpperCase()}, ${company_id}, ${quantity}, ${description}, ${estimated_time_minutes || null}, ${charged_value_per_piece || 0}, ${material_cost || 0}, ${session.id})
       RETURNING *
     `;
 

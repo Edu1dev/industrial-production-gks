@@ -30,7 +30,7 @@ interface Project {
   company_name: string;
   description: string;
   quantity: number;
-  estimated_time_hours: number | null;
+  estimated_time_minutes: number | null;
   charged_value_per_piece: number;
   material_cost: number;
   status: string;
@@ -78,7 +78,7 @@ export default function ProjetosPage() {
     company_id: "",
     quantity: "1",
     description: "",
-    estimated_time_hours: "",
+    estimated_time_minutes: "",
     charged_value_per_piece: "",
     material_cost: "",
   });
@@ -100,7 +100,7 @@ export default function ProjetosPage() {
       company_id: "",
       quantity: "1",
       description: "",
-      estimated_time_hours: "",
+      estimated_time_minutes: "",
       charged_value_per_piece: "",
       material_cost: "",
     });
@@ -113,7 +113,7 @@ export default function ProjetosPage() {
       company_id: String(project.company_id),
       quantity: String(project.quantity),
       description: project.description || "",
-      estimated_time_hours: project.estimated_time_hours ? String(project.estimated_time_hours) : "",
+      estimated_time_minutes: project.estimated_time_minutes ? String(project.estimated_time_minutes) : "",
       charged_value_per_piece: String(project.charged_value_per_piece || ""),
       material_cost: project.material_cost ? String(project.material_cost) : "",
     });
@@ -135,7 +135,7 @@ export default function ProjetosPage() {
         company_id: parseInt(form.company_id),
         quantity: parseInt(form.quantity),
         description: form.description.trim(),
-        estimated_time_hours: form.estimated_time_hours ? parseFloat(form.estimated_time_hours) : null,
+        estimated_time_minutes: form.estimated_time_minutes ? parseFloat(form.estimated_time_minutes) : null,
         charged_value_per_piece: form.charged_value_per_piece ? parseFloat(form.charged_value_per_piece) : 0,
         material_cost: form.material_cost ? parseFloat(form.material_cost) : 0,
       };
@@ -445,10 +445,10 @@ export default function ProjetosPage() {
                         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                           {/* Company name removed as it's redundant in this view */}
                           <span>Qtd: {project.quantity}</span>
-                          {project.estimated_time_hours && (
+                          {project.estimated_time_minutes && (
                             <span className="flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5" />
-                              {project.estimated_time_hours}h/peca
+                              {project.estimated_time_minutes} min/peca
                             </span>
                           )}
                           <span>R$ {Number(project.charged_value_per_piece).toFixed(2)}/peca</span>
@@ -662,15 +662,15 @@ export default function ProjetosPage() {
 
             <div>
               <label htmlFor="proj_estimated_time" className="mb-1.5 block text-sm font-medium text-card-foreground">
-                Tempo Previsto por Peca (horas)
+                Tempo Previsto por Peca (minutos)
               </label>
               <input
                 id="proj_estimated_time"
                 type="number"
                 min="0"
-                step="0.01"
-                value={form.estimated_time_hours}
-                onChange={(e) => setForm({ ...form, estimated_time_hours: e.target.value })}
+                step="1"
+                value={form.estimated_time_minutes}
+                onChange={(e) => setForm({ ...form, estimated_time_minutes: e.target.value })}
                 placeholder="Opcional"
                 className="h-14 w-full rounded-xl border border-input bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
               />

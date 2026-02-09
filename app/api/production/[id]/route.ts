@@ -2,6 +2,49 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 
+// Helper: Close open time record when pausing/finishing
+async function closeTimeRecord(
+  sql: ReturnType<typeof getDb>,
+  operatorId: number,
+  reason: string | null,
+  reasonNotes?: string
+) {
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+
+  // Find open time record for this operator today
+  const openRecords = await sql`
+    SELECT id, clock_in FROM time_records 
+    WHERE operator_id = ${operatorId} 
+      AND record_date = ${today}
+      AND clock_out IS NULL
+    ORDER BY clock_in DESC
+    LIMIT 1
+  `;
+
+  if (openRecords.length === 0) {
+    return null; // No open record to close
+  }
+
+  const openRecord = openRecords[0];
+  const clockIn = new Date(openRecord.clock_in).getTime();
+  const clockOut = now.getTime();
+  const workedMinutes = Math.round((clockOut - clockIn) / 60000);
+
+  // Close the time record
+  const result = await sql`
+    UPDATE time_records
+    SET clock_out = ${now.toISOString()},
+        reason = ${reason},
+        reason_notes = ${reasonNotes || null},
+        worked_minutes = ${workedMinutes}
+    WHERE id = ${openRecord.id}
+    RETURNING *
+  `;
+
+  return result[0];
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -44,12 +87,22 @@ export async function PATCH(
       RETURNING *
     `;
 
-    // Create pause_log with reason if provided (required for project-based production)
+    // Create pause_log with reason if provided
     if (reason) {
       await sql`
         INSERT INTO pause_logs (production_record_id, reason, paused_at)
         VALUES (${parseInt(id)}, ${reason}, NOW())
       `;
+    }
+
+    // Close time record ONLY if reason is "Almoço" or "Fim do turno"
+    const reasonsToCloseRecord = ["Almoço", "Fim do turno"];
+    if (reason && reasonsToCloseRecord.includes(reason)) {
+      try {
+        await closeTimeRecord(sql, session.id, reason);
+      } catch (e) {
+        console.error("Failed to close time record:", e);
+      }
     }
 
     return NextResponse.json({ record: updated[0] });
@@ -88,6 +141,45 @@ export async function PATCH(
         LIMIT 1
       )
     `;
+
+    // If operator has NO open time record (e.g. returning from Lunch), create one
+    // But verify first if it corresponds to "Almoço" or "Fim do turno" return logic
+    // Actually, just ensuring they have an open record is enough.
+    try {
+      const now = new Date();
+      const today = now.toISOString().split("T")[0];
+      // Check if there's already an open record
+      const openRecords = await sql`
+        SELECT id FROM time_records 
+        WHERE operator_id = ${session.id} 
+          AND record_date = ${today}
+          AND clock_out IS NULL
+        LIMIT 1
+      `;
+
+      if (openRecords.length === 0) {
+        // Create new record (returning from break that closed the record)
+        // Get part code from the production record
+        const partData = await sql`
+          SELECT p.code FROM production_records pr
+          JOIN parts p ON pr.part_id = p.id
+          WHERE pr.id = ${parseInt(id)}
+        `;
+        const partCode = partData[0]?.code || null;
+
+        // Check if it's the very first record of the day to apply -5 min?
+        // Logic: createClockInRecord applies -5 min. Here we are RESUMING.
+        // Usually returning from lunch doesn't get -5 min.
+        // We'll just use NOW().
+
+        await sql`
+          INSERT INTO time_records (operator_id, record_date, clock_in, part_code, production_record_id)
+          VALUES (${session.id}, ${today}, ${now.toISOString()}, ${partCode}, ${parseInt(id)})
+        `;
+      }
+    } catch (e) {
+      console.error("Failed to create time record on resume:", e);
+    }
 
     return NextResponse.json({ record: updated[0] });
   }
@@ -139,6 +231,9 @@ export async function PATCH(
         `;
       }
     }
+
+    // DO NOT close time record on finish. Operator continues to next piece.
+    // unless they explicitly pause/stop.
 
     return NextResponse.json({ record: updated[0] });
   }

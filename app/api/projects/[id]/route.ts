@@ -114,19 +114,18 @@ export async function PATCH(
     company_id,
     quantity,
     description,
-    estimated_time_hours,
+    estimated_time_minutes,
     charged_value_per_piece,
     material_cost,
   } = body;
 
   try {
     const updated = await sql`
-      UPDATE projects
       SET part_code = COALESCE(${part_code ? part_code.toUpperCase() : null}, part_code),
           company_id = COALESCE(${company_id || null}::int, company_id),
           quantity = COALESCE(${quantity || null}::int, quantity),
           description = COALESCE(${description || null}, description),
-          estimated_time_hours = CASE WHEN ${estimated_time_hours !== undefined} THEN ${estimated_time_hours ?? null}::decimal ELSE estimated_time_hours END,
+          estimated_time_minutes = CASE WHEN ${estimated_time_minutes !== undefined} THEN ${estimated_time_minutes ?? null}::decimal ELSE estimated_time_minutes END,
           charged_value_per_piece = COALESCE(${charged_value_per_piece ?? null}::decimal, charged_value_per_piece),
           material_cost = CASE WHEN ${material_cost !== undefined} THEN ${material_cost ?? null}::decimal ELSE material_cost END
       WHERE id = ${parseInt(id)}

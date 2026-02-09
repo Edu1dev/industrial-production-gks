@@ -11,7 +11,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowRight, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface FinishProductionDialogProps {
     open: boolean;
@@ -130,42 +130,120 @@ export function FinishProductionDialog({
         }
     }
 
-    // Project-based finish dialog - simple confirmation
+    const [confirmProjectComplete, setConfirmProjectComplete] = useState(false);
+
+    // Reset state when dialog opens/closes
+    useEffect(() => {
+        if (!open) {
+            setConfirmProjectComplete(false);
+            setLoading(false);
+        }
+    }, [open]);
+
+    // Project-based finish dialog
     if (projectId) {
+        if (confirmProjectComplete) {
+            // Confirmation Modal for Complete Finish
+            return (
+                <Dialog open={open} onOpenChange={onOpenChange}>
+                    <DialogContent className="sm:max-w-[450px]">
+                        <DialogHeader>
+                            <DialogTitle className="text-xl flex items-center gap-2 text-destructive">
+                                <AlertCircle className="h-5 w-5" />
+                                Finalizar Projeto Completamente?
+                            </DialogTitle>
+                            <DialogDescription className="text-base font-medium text-foreground pt-2">
+                                Tem certeza que não há mais nenhum procedimento para fazer com a peça?
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <div className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive mt-2">
+                            Ao confirmar, o projeto será marcado como <strong>FINALIZADO</strong>.
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:gap-0 mt-4">
+                            <Button
+                                variant="outline"
+                                onClick={() => setConfirmProjectComplete(false)}
+                                disabled={loading}
+                            >
+                                Voltar
+                            </Button>
+                            <Button
+                                onClick={() => handleFinish(true)}
+                                disabled={loading}
+                                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                            >
+                                {loading ? (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                )}
+                                Sim, finalizar tudo
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            );
+        }
+
+        // Selection Dialog (Operation vs Complete)
         return (
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent className="sm:max-w-[450px]">
+                <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle className="text-xl">Finalizar Operacao</DialogTitle>
                         <DialogDescription>
-                            Tem certeza que deseja finalizar a operacao <strong>{operationName}</strong> da peca{" "}
-                            <strong className="font-mono">{partCode}</strong>?
+                            Voce esta finalizando a operacao <strong>{operationName}</strong> da peca{" "}
+                            <strong className="font-mono">{partCode}</strong>
                         </DialogDescription>
                     </DialogHeader>
 
-                    <p className="text-sm text-muted-foreground">
-                        O projeto ficara disponivel para a proxima operacao.
-                    </p>
+                    <div className="py-4 grid gap-4">
+                        <p className="text-sm font-medium text-foreground">
+                            O que deseja fazer com o projeto?
+                        </p>
 
-                    <DialogFooter className="gap-2 sm:gap-0">
+                        <button
+                            onClick={() => handleFinish(false)}
+                            disabled={loading}
+                            className="flex items-center justify-between rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-accent hover:bg-accent/5"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                    <ArrowRight className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="font-medium text-foreground">Finalizar apenas operação</p>
+                                    <p className="text-xs text-muted-foreground">O projeto continua para a próxima etapa</p>
+                                </div>
+                            </div>
+                        </button>
+
+                        <button
+                            onClick={() => setConfirmProjectComplete(true)}
+                            disabled={loading}
+                            className="flex items-center justify-between rounded-xl border border-border bg-card p-4 text-left transition-all hover:border-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/5"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]">
+                                    <CheckCircle2 className="h-5 w-5" />
+                                </div>
+                                <div>
+                                    <p className="font-medium text-foreground">Finalizar Projeto Completo</p>
+                                    <p className="text-xs text-muted-foreground">Marca o projeto e a peça como concluídos</p>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+
+                    <DialogFooter>
                         <Button
-                            variant="outline"
+                            variant="ghost"
                             onClick={() => onOpenChange(false)}
                             disabled={loading}
                         >
                             Cancelar
-                        </Button>
-                        <Button
-                            onClick={() => handleFinish(false)}
-                            disabled={loading}
-                            className="bg-[hsl(var(--success))] hover:bg-[hsl(var(--success))]/90 text-[hsl(var(--success-foreground))]"
-                        >
-                            {loading ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                            )}
-                            Sim, finalizar
                         </Button>
                     </DialogFooter>
                 </DialogContent>

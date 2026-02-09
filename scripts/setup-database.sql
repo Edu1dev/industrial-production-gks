@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS parts (
 CREATE TABLE IF NOT EXISTS operations (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL UNIQUE,
+  base_cost_per_hour DECIMAL(12,2) DEFAULT 0,
   machine_cost_per_hour DECIMAL(12,2) DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -50,11 +51,11 @@ CREATE TABLE IF NOT EXISTS production_records (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Seed default operations
-INSERT INTO operations (name, machine_cost_per_hour) VALUES
-  ('Fresa', 80.00),
-  ('Torno', 70.00),
-  ('Solda', 60.00)
+-- Seed default operations (machine_cost = base_cost * 1.667)
+INSERT INTO operations (name, base_cost_per_hour, machine_cost_per_hour) VALUES
+  ('Fresa', 48.00, ROUND(48.00 * 1.667, 2)),
+  ('Torno', 42.00, ROUND(42.00 * 1.667, 2)),
+  ('Solda', 36.00, ROUND(36.00 * 1.667, 2))
 ON CONFLICT (name) DO NOTHING;
 
 -- Seed a demo operator (password: admin123)

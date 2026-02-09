@@ -14,6 +14,7 @@ import {
   FolderKanban,
   Menu,
   X,
+  Clock,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -28,6 +29,8 @@ export function DashboardHeader({ operator }: DashboardHeaderProps) {
 
   const navItems = [
     { href: "/dashboard", label: "Producao", icon: Activity, adminOnly: false },
+    { href: "/dashboard/ponto", label: "Ponto", icon: Clock, adminOnly: true },
+    { href: "/dashboard/ausencias", label: "Ausencias", icon: LogOut, adminOnly: true },
     { href: "/dashboard/projetos", label: "Projetos", icon: FolderKanban, adminOnly: true },
     { href: "/dashboard/operadores", label: "Operadores", icon: Users, adminOnly: true },
     { href: "/dashboard/operacoes", label: "Operacoes", icon: Wrench, adminOnly: true },

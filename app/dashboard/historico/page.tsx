@@ -1,9 +1,8 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react"; // Import ArrowLeft here
+import React from "react";
 import useSWR from "swr";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   History,
   Search,
@@ -11,12 +10,12 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
-  CheckCircle2,
-  Trophy,
-  XCircle,
+  ChevronDown,
+  ChevronRight as ChevronExpand,
   DollarSign,
   Clock,
   X,
+  Layers,
 } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -34,6 +33,7 @@ interface HistoryRecord {
   part_description?: string;
   material_cost: number;
   operation_name: string;
+  base_cost_per_hour: number;
   machine_cost_per_hour: number;
   operator_name: string;
   operator_id: number;
@@ -43,6 +43,15 @@ interface HistoryRecord {
   total_material_cost: number | null;
   company_name?: string;
   company_id?: number;
+  group_id?: number;
+  operation_sequence?: number;
+}
+
+interface DisplayRow {
+  record: HistoryRecord;
+  isGroup: boolean;
+  groupSize: number;
+  subRows: HistoryRecord[];
 }
 
 const PAGE_SIZE = 20;
@@ -59,14 +68,13 @@ export default function HistoricoPage() {
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [page, setPage] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
 
-  // Fetch operators and companies for filter dropdowns
   const { data: operatorsData } = useSWR("/api/operators", fetcher);
   const operators = operatorsData?.operators || [];
   const { data: companiesData } = useSWR("/api/companies", fetcher);
   const companies = companiesData?.companies || [];
 
-  // Build URL with filters
   const buildUrl = useCallback(() => {
     const params = new URLSearchParams();
     if (appliedFilters.operator_id)
@@ -89,6 +97,66 @@ export default function HistoricoPage() {
   const total: number = data?.total || 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  // Group records by group_id. API already returns groups together and sorted by operation_sequence.
+  const displayRows: DisplayRow[] = useMemo(() => {
+    const groupMap = new Map<number, HistoryRecord[]>();
+    const rows: DisplayRow[] = [];
+    const seenGroups = new Set<number>();
+
+    // Collect group members
+    records.forEach((rec) => {
+      if (rec.group_id) {
+        if (!groupMap.has(rec.group_id)) {
+          groupMap.set(rec.group_id, []);
+        }
+        groupMap.get(rec.group_id)!.push(rec);
+      }
+    });
+
+    // Sort each group by operation_sequence (API already does this, but ensure)
+    groupMap.forEach((group) => {
+      group.sort(
+        (a, b) => (a.operation_sequence || 0) - (b.operation_sequence || 0),
+      );
+    });
+
+    // Build display rows preserving API order
+    records.forEach((rec) => {
+      if (rec.group_id) {
+        if (seenGroups.has(rec.group_id)) return;
+        seenGroups.add(rec.group_id);
+        const group = groupMap.get(rec.group_id)!;
+        rows.push({
+          record: group[0],
+          isGroup: group.length > 1,
+          groupSize: group.length,
+          subRows: group.slice(1),
+        });
+      } else {
+        rows.push({
+          record: rec,
+          isGroup: false,
+          groupSize: 1,
+          subRows: [],
+        });
+      }
+    });
+
+    return rows;
+  }, [records]);
+
+  function toggleGroup(groupId: number) {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  }
+
   function applyFilters() {
     setAppliedFilters(filters);
     setPage(0);
@@ -110,50 +178,30 @@ export default function HistoricoPage() {
 
   const hasActiveFilters = Object.values(appliedFilters).some((v) => v !== "");
 
-  function getEvaluation(record: HistoryRecord) {
-    if (!record.expected_time_minutes || !record.total_time_min) return null;
-    const actual = Number(record.total_time_min);
-    const expected = Number(record.expected_time_minutes);
-
-    if (actual < expected * 0.9)
-      return {
-        label: "EXCELENTE",
-        color: "text-[hsl(var(--success))]",
-        bg: "bg-[hsl(var(--success))]/10",
-        icon: CheckCircle2,
-      };
-    if (actual <= expected * 1.1)
-      return {
-        label: "BOM",
-        color: "text-primary",
-        bg: "bg-primary/10",
-        icon: Trophy,
-      };
-    return {
-      label: "PESSIMO",
-      color: "text-destructive",
-      bg: "bg-destructive/10",
-      icon: XCircle,
-    };
-  }
-
-  // Summary stats for filtered results
-  const finishedRecords = records.filter((r) => r.status === "FINALIZADO");
+  // Summary stats — only count head records (one per group) for charged values
+  const allFinished = records.filter((r) => r.status === "FINALIZADO");
   const avgTimePP =
-    finishedRecords.length > 0
+    allFinished.length > 0
       ? (
-          finishedRecords.reduce(
-            (sum, r) => sum + (Number(r.time_per_piece_min) || 0),
-            0,
-          ) / finishedRecords.length
-        ).toFixed(2)
+        allFinished.reduce(
+          (sum, r) => sum + (Number(r.time_per_piece_min) || 0),
+          0,
+        ) / allFinished.length
+      ).toFixed(2)
       : null;
-  const totalMachineCost = finishedRecords.reduce(
+  const totalMachineCost = allFinished.reduce(
     (sum, r) => sum + (Number(r.machine_cost) || 0),
     0,
   );
-  const totalCharged = records.reduce(
-    (sum, r) => sum + (Number(r.charged_value) || 0),
+  // Charged value: only from head records (first operation per group)
+  const totalCharged = displayRows.reduce(
+    (sum, row) =>
+      sum + Number(row.record.charged_value || 0) * (row.record.quantity || 0),
+    0,
+  );
+  // Material cost: only from head records (belongs to group, not individual operations)
+  const totalMaterialCostSum = displayRows.reduce(
+    (sum, row) => sum + (Number(row.record.total_material_cost) || 0),
     0,
   );
 
@@ -172,11 +220,10 @@ export default function HistoricoPage() {
         </div>
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className={`flex h-12 items-center gap-2 rounded-xl px-5 font-bold transition-all ${
-            hasActiveFilters
-              ? "bg-accent text-accent-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-          }`}
+          className={`flex h-12 items-center gap-2 rounded-xl px-5 font-bold transition-all ${hasActiveFilters
+            ? "bg-accent text-accent-foreground"
+            : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+            }`}
         >
           <Filter className="h-5 w-5" />
           Filtros
@@ -221,13 +268,11 @@ export default function HistoricoPage() {
                 className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
               >
                 <option value="">Todas</option>
-                {companies.map(
-                  (c: { id: number; name: string }) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ),
-                )}
+                {companies.map((c: { id: number; name: string }) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -247,13 +292,11 @@ export default function HistoricoPage() {
                 className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
               >
                 <option value="">Todos</option>
-                {operators.map(
-                  (op: { id: number; name: string }) => (
-                    <option key={op.id} value={op.id}>
-                      {op.name}
-                    </option>
-                  ),
-                )}
+                {operators.map((op: { id: number; name: string }) => (
+                  <option key={op.id} value={op.id}>
+                    {op.name}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -349,7 +392,7 @@ export default function HistoricoPage() {
       )}
 
       {/* Summary Stats */}
-      {finishedRecords.length > 0 && (
+      {displayRows.length > 0 && (
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -357,13 +400,13 @@ export default function HistoricoPage() {
               Tempo Med./Peca
             </div>
             <p className="mt-1 font-mono text-xl font-bold text-foreground">
-              {avgTimePP}min
+              {avgTimePP ? `${avgTimePP}min` : "-"}
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <DollarSign className="h-3.5 w-3.5" />
-              Custo Maquina
+              Custo Maquina Total
             </div>
             <p className="mt-1 font-mono text-xl font-bold text-foreground">
               R$ {totalMachineCost.toFixed(2)}
@@ -372,7 +415,7 @@ export default function HistoricoPage() {
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <DollarSign className="h-3.5 w-3.5" />
-              Valor Cobrado
+              Valor Total Cobrado
             </div>
             <p className="mt-1 font-mono text-xl font-bold text-accent">
               R$ {totalCharged.toFixed(2)}
@@ -384,7 +427,7 @@ export default function HistoricoPage() {
               Na pagina
             </div>
             <p className="mt-1 font-mono text-xl font-bold text-foreground">
-              {records.length}
+              {displayRows.length}
               <span className="text-sm font-normal text-muted-foreground">
                 {" "}
                 / {total}
@@ -394,12 +437,12 @@ export default function HistoricoPage() {
         </div>
       )}
 
-      {/* Records Table */}
+      {/* Records */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : records.length === 0 ? (
+      ) : displayRows.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-12 text-center shadow-sm">
           <History className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
           <h3 className="mb-1 text-lg font-semibold text-card-foreground">
@@ -412,183 +455,381 @@ export default function HistoricoPage() {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted">
-                  <th className="whitespace-nowrap px-3 py-3 text-left font-semibold text-foreground">
-                    Data
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left font-semibold text-foreground">
-                    Peca
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left font-semibold text-foreground">
-                    Empresa
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left font-semibold text-foreground">
-                    Operacao
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-left font-semibold text-foreground">
-                    Operador
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-foreground">
-                    Qtd
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-foreground">
-                    Tempo Total
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-foreground">
-                    Tempo/Peca
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-foreground">
-                    Custo Maq.
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-foreground">
-                    Custo MP
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-foreground">
-                    Cobrado
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-foreground">
-                    Status
-                  </th>
-                  <th className="whitespace-nowrap px-3 py-3 text-center font-semibold text-foreground">
-                    Avaliacao
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {records.map((rec) => {
-                  const evaluation = getEvaluation(rec);
-                  const EvalIcon = evaluation?.icon;
-                  const totalCost =
-                    (Number(rec.machine_cost) || 0) +
-                    (Number(rec.total_material_cost) || 0);
+        <div className="space-y-3">
+          {displayRows.map((row) => {
+            const rec = row.record;
+            const expanded =
+              rec.group_id ? expandedGroups.has(rec.group_id) : false;
+            const chargedPerPiece = Number(rec.charged_value) || 0;
+            const chargedTotal = chargedPerPiece * (rec.quantity || 0);
 
-                  return (
-                    <tr
-                      key={rec.id}
-                      className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
-                    >
-                      <td className="whitespace-nowrap px-3 py-3 text-foreground">
-                        {new Date(rec.start_time).toLocaleDateString("pt-BR")}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span className="font-mono font-bold text-foreground">
-                          {rec.part_code}
-                        </span>
+            return (
+              <div
+                key={rec.group_id ? `g-${rec.group_id}` : `s-${rec.id}`}
+                className={`rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md ${row.isGroup
+                  ? expanded
+                    ? "border-accent/50"
+                    : "border-border"
+                  : "border-border"
+                  }`}
+              >
+                {/* Card Principal */}
+                <div
+                  onClick={
+                    row.isGroup && rec.group_id
+                      ? () => toggleGroup(rec.group_id!)
+                      : undefined
+                  }
+                  className={`p-4 ${row.isGroup ? "cursor-pointer select-none" : ""
+                    }`}
+                >
+                  {/* Header: Peca + Empresa + Data + Status */}
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      {row.isGroup && (
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          {expanded ? (
+                            <ChevronDown className="h-5 w-5" />
+                          ) : (
+                            <ChevronExpand className="h-5 w-5" />
+                          )}
+                        </div>
+                      )}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-lg font-bold text-foreground">
+                            {rec.part_code}
+                          </span>
+                          {row.isGroup && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                              <Layers className="h-3 w-3" />
+                              {row.groupSize} operacoes
+                            </span>
+                          )}
+                        </div>
                         {rec.part_description && (
-                          <p className="max-w-[120px] truncate text-xs text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {rec.part_description}
                           </p>
                         )}
-                      </td>
-                      <td className="px-3 py-3 text-foreground">
-                        {rec.company_name || (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-foreground">
-                        {rec.operation_name}
-                      </td>
-                      <td className="px-3 py-3 text-foreground">
-                        {rec.operator_name}
-                      </td>
-                      <td className="px-3 py-3 text-center font-mono text-foreground">
-                        {rec.quantity}
-                      </td>
-                      <td className="px-3 py-3 text-center font-mono text-foreground">
-                        {rec.total_time_min
-                          ? `${rec.total_time_min}min`
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-3 text-center font-mono font-bold text-foreground">
-                        {rec.time_per_piece_min
-                          ? `${rec.time_per_piece_min}min`
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-3 text-center font-mono text-foreground">
-                        {rec.machine_cost
-                          ? `R$${Number(rec.machine_cost).toFixed(2)}`
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-3 text-center font-mono text-foreground">
-                        {rec.total_material_cost
-                          ? `R$${Number(rec.total_material_cost).toFixed(2)}`
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-3 text-center font-mono text-accent">
-                        {Number(rec.charged_value) > 0
-                          ? `R$${Number(rec.charged_value).toFixed(2)}`
-                          : "-"}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <span
-                          className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            rec.status === "FINALIZADO"
-                              ? "bg-muted text-muted-foreground"
-                              : rec.status === "EM_PRODUCAO"
-                                ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
-                                : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        {new Date(rec.start_time).toLocaleDateString("pt-BR")}
+                      </span>
+                      <span
+                        className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${rec.status === "FINALIZADO"
+                          ? "bg-muted text-muted-foreground"
+                          : rec.status === "EM_PRODUCAO"
+                            ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+                            : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
                           }`}
-                        >
-                          {rec.status === "EM_PRODUCAO"
-                            ? "Producao"
-                            : rec.status === "PAUSADO"
-                              ? "Pausado"
-                              : "Finalizado"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {evaluation && EvalIcon ? (
-                          <span
-                            className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold ${evaluation.bg} ${evaluation.color}`}
-                          >
-                            <EvalIcon className="h-3.5 w-3.5" />
-                            {evaluation.label}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            -
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      >
+                        {rec.status === "EM_PRODUCAO"
+                          ? "Producao"
+                          : rec.status === "PAUSADO"
+                            ? "Pausado"
+                            : "Finalizado"}
+                      </span>
+                    </div>
+                  </div>
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <p className="text-sm text-muted-foreground">
-                Pagina {page + 1} de {totalPages}
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setPage(Math.max(0, page - 1))}
-                  disabled={page === 0}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-40"
-                  aria-label="Pagina anterior"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-                <button
-                  onClick={() =>
-                    setPage(Math.min(totalPages - 1, page + 1))
-                  }
-                  disabled={page >= totalPages - 1}
-                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-40"
-                  aria-label="Proxima pagina"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
+                  {/* Info Grid */}
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-10">
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Empresa
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {rec.company_name || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Operacao
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {rec.operation_name}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Operador
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {rec.operator_name}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Qtd
+                      </p>
+                      <p className="font-mono text-sm font-bold text-foreground">
+                        {rec.quantity}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Base/Hora
+                      </p>
+                      <p className="font-mono text-sm text-foreground">
+                        {rec.base_cost_per_hour
+                          ? `R$ ${Number(rec.base_cost_per_hour).toFixed(2)}`
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Maq/Hora
+                      </p>
+                      <p className="font-mono text-sm text-foreground">
+                        {rec.machine_cost_per_hour
+                          ? `R$ ${Number(rec.machine_cost_per_hour).toFixed(2)}`
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Custo Maq.
+                      </p>
+                      <p className="font-mono text-sm text-foreground">
+                        {rec.machine_cost
+                          ? `R$ ${Number(rec.machine_cost).toFixed(2)}`
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Custo MP
+                      </p>
+                      <p className="font-mono text-sm text-foreground">
+                        {rec.total_material_cost
+                          ? `R$ ${Number(rec.total_material_cost).toFixed(2)}`
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Valor/Pç
+                      </p>
+                      <p className="font-mono text-sm font-semibold text-accent">
+                        {chargedPerPiece > 0
+                          ? `R$ ${chargedPerPiece.toFixed(2)}`
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                        Valor Total
+                      </p>
+                      <p className="font-mono text-sm font-bold text-accent">
+                        {chargedTotal > 0
+                          ? `R$ ${chargedTotal.toFixed(2)}`
+                          : "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Financial Analysis / Profitability - Only at Group Level */}
+                  {(() => {
+                    const allRecords = row.isGroup ? [rec, ...row.subRows] : [rec];
+                    const allFinished = allRecords.every(r => r.status === "FINALIZADO");
+                    const totalTime = allRecords.reduce((acc, r) => acc + (Number(r.total_time_min) || 0), 0);
+                    const realPerMin = totalTime > 0 ? chargedTotal / totalTime : 0;
+                    const TARGET_PER_MIN = 1.667; // Fixed business factor
+
+                    return (
+                      <div className="mt-3 flex items-center justify-between rounded-xl bg-muted/40 px-4 py-2">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Tempo Total
+                            </p>
+                            <p className="font-mono text-sm font-medium text-foreground">
+                              {totalTime.toFixed(2)} min
+                            </p>
+                          </div>
+                          <div className="h-8 w-px bg-border"></div>
+                          <div>
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Valor Cobrado
+                            </p>
+                            <p className="font-mono text-sm font-bold text-accent">
+                              R$ {chargedTotal.toFixed(2)}
+                            </p>
+                          </div>
+                          <div className="h-8 w-px bg-border"></div>
+                          <div>
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Real / Min
+                            </p>
+                            <p className={`font-mono text-sm font-bold ${allFinished
+                              ? realPerMin < TARGET_PER_MIN - 0.01
+                                ? "text-destructive"
+                                : realPerMin > TARGET_PER_MIN + 0.01
+                                  ? "text-emerald-500"
+                                  : "text-foreground"
+                              : "text-foreground"
+                              }`}>
+                              R$ {realPerMin.toFixed(2)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Meta / Min
+                            </p>
+                            <p className="font-mono text-sm text-muted-foreground">
+                              R$ {TARGET_PER_MIN.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {totalTime === 0 ? (
+                            <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                              📊 Sem dados suficientes
+                            </span>
+                          ) : allFinished ? (
+                            realPerMin < TARGET_PER_MIN - 0.01 ? (
+                              <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">
+                                ❌ Ruim
+                              </span>
+                            ) : realPerMin > TARGET_PER_MIN + 0.01 ? (
+                              <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-500">
+                                🔥 Excelente
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
+                                ✅ Bom
+                              </span>
+                            )
+                          ) : (
+                            <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                              ⏳ Em andamento
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Sub-operacoes expandidas */}
+                {expanded && row.subRows.length > 0 && (
+                  <div className="border-t border-border bg-muted/30 px-4 pb-3 pt-2">
+                    <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                      Operacoes do grupo
+                    </p>
+                    <div className="space-y-2">
+                      {row.subRows.map((sub) => (
+                        <div
+                          key={sub.id}
+                          className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl bg-background p-3"
+                        >
+                          <div className="min-w-[80px]">
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Data
+                            </p>
+                            <p className="text-sm text-foreground">
+                              {new Date(sub.start_time).toLocaleDateString("pt-BR")}
+                            </p>
+                          </div>
+                          <div className="min-w-[100px]">
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Operacao
+                            </p>
+                            <p className="text-sm font-medium text-foreground">
+                              {sub.operation_name}
+                            </p>
+                          </div>
+                          <div className="min-w-[100px]">
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Operador
+                            </p>
+                            <p className="text-sm text-foreground">
+                              {sub.operator_name}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Qtd
+                            </p>
+                            <p className="font-mono text-sm font-bold text-foreground">
+                              {sub.quantity}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Tempo Total
+                            </p>
+                            <p className="font-mono text-sm text-foreground">
+                              {sub.total_time_min
+                                ? `${sub.total_time_min} min`
+                                : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                              Tempo/Peca
+                            </p>
+                            <p className="font-mono text-sm text-foreground">
+                              {sub.time_per_piece_min
+                                ? `${sub.time_per_piece_min} min`
+                                : "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <span
+                              className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${sub.status === "FINALIZADO"
+                                ? "bg-muted text-muted-foreground"
+                                : sub.status === "EM_PRODUCAO"
+                                  ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+                                  : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+                                }`}
+                            >
+                              {sub.status === "EM_PRODUCAO"
+                                ? "Producao"
+                                : sub.status === "PAUSADO"
+                                  ? "Pausado"
+                                  : "Finalizado"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
+          <p className="text-sm text-muted-foreground">
+            Pagina {page + 1} de {totalPages}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(Math.max(0, page - 1))}
+              disabled={page === 0}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-40"
+              aria-label="Pagina anterior"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button
+              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+              disabled={page >= totalPages - 1}
+              className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-40"
+              aria-label="Proxima pagina"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       )}
     </div>

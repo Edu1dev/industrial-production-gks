@@ -36,14 +36,23 @@ export async function GET() {
       )::numeric, 2) as worst_time_per_piece_min,
       COALESCE((
         SELECT SUM(DISTINCT_PIECES.quantity) FROM (
-          SELECT DISTINCT ON (COALESCE(pr2.group_id::text, pr2.id::text))
-            CASE 
-              WHEN pr2.group_id IS NOT NULL THEN pr2.quantity
-              ELSE pr2.quantity
-            END as quantity
+          -- Records with project_id: count quantity once per project
+          SELECT MAX(pr2.quantity) as quantity
           FROM production_records pr2
-          WHERE pr2.operator_id = op.id 
+          WHERE pr2.operator_id = op.id
             AND pr2.status = 'FINALIZADO'
+            AND pr2.project_id IS NOT NULL
+          GROUP BY pr2.project_id
+
+          UNION ALL
+
+          -- Records without project_id (legacy): one per group_id or id
+          SELECT MAX(pr2.quantity) as quantity
+          FROM production_records pr2
+          WHERE pr2.operator_id = op.id
+            AND pr2.status = 'FINALIZADO'
+            AND pr2.project_id IS NULL
+          GROUP BY COALESCE(pr2.group_id::text, pr2.id::text)
         ) AS DISTINCT_PIECES
       ), 0) as total_pieces
     FROM operators op

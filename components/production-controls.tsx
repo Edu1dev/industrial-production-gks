@@ -269,18 +269,54 @@ export function ProductionControls({ record }: ProductionControlsProps) {
           <DialogHeader>
             <DialogTitle>Motivo da Pausa</DialogTitle>
             <DialogDescription>
-              Informe o motivo da pausa para a peca <strong className="font-mono">{record.part_code}</strong>
+              Selecione o motivo da pausa para a peça <strong className="font-mono">{record.part_code}</strong>
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <textarea
-              value={pauseReason}
-              onChange={(e) => setPauseReason(e.target.value)}
-              placeholder="Ex: Aguardando material, troca de ferramenta..."
-              rows={3}
-              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              autoFocus
-            />
+          <div className="py-4 space-y-3">
+            {/* Predefined reason buttons */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { value: "Almoço", icon: "🍽️" },
+                { value: "Fim do turno", icon: "🏠" },
+                { value: "Manutenção", icon: "🔧" },
+                { value: "Banheiro", icon: "🚻" },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setPauseReason(option.value)}
+                  className={`flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-all ${pauseReason === option.value
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border bg-background text-foreground hover:border-accent/50"
+                    }`}
+                >
+                  <span>{option.icon}</span>
+                  {option.value}
+                </button>
+              ))}
+            </div>
+            {/* Other option with text input */}
+            <div>
+              <button
+                onClick={() => setPauseReason("Outro")}
+                className={`w-full flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-all ${pauseReason === "Outro" || (pauseReason && !["Almoço", "Fim do turno", "Manutenção", "Banheiro"].includes(pauseReason))
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border bg-background text-foreground hover:border-accent/50"
+                  }`}
+              >
+                <span>📝</span>
+                Outro motivo
+              </button>
+              {(pauseReason === "Outro" || (pauseReason && !["Almoço", "Fim do turno", "Manutenção", "Banheiro"].includes(pauseReason))) && (
+                <textarea
+                  value={pauseReason === "Outro" ? "" : pauseReason}
+                  onChange={(e) => setPauseReason(e.target.value || "Outro")}
+                  placeholder="Descreva o motivo..."
+                  rows={2}
+                  className="mt-2 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                  autoFocus
+                />
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -294,7 +330,8 @@ export function ProductionControls({ record }: ProductionControlsProps) {
             </Button>
             <Button
               onClick={handlePauseWithReason}
-              className="bg-[hsl(var(--warning))] text-[hsl(var(--warning-foreground))] hover:bg-[hsl(var(--warning))]/90"
+              disabled={!pauseReason.trim()}
+              className="bg-[hsl(var(--warning))] text-[hsl(var(--warning-foreground))] hover:bg-[hsl(var(--warning))]/90 disabled:opacity-50"
             >
               <Pause className="mr-2 h-4 w-4" />
               Pausar

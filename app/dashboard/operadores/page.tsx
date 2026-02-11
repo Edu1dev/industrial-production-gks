@@ -391,165 +391,263 @@ export default function OperadoresPage() {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted">
-                  <th className="px-4 py-3 text-left font-semibold text-foreground">
-                    #
-                  </th>
-                  <th className="px-4 py-3 text-left font-semibold text-foreground">
-                    Operador
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-foreground">
-                    <span className="flex items-center justify-center gap-1">
-                      <Package className="h-3.5 w-3.5" />
-                      Producoes
-                    </span>
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-foreground">
-                    <span className="flex items-center justify-center gap-1">
-                      <TrendingUp className="h-3.5 w-3.5" />
-                      Pecas
-                    </span>
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-foreground">
-                    <span className="flex items-center justify-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
-                      Tempo Med./Peca
-                    </span>
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-foreground">
-                    Melhor Tempo
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-foreground">
-                    Pior Tempo
-                  </th>
-                  <th className="px-4 py-3 text-center font-semibold text-foreground">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-right font-semibold text-foreground">
-                    Acoes
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {operators.map((op, i) => {
-                  const rank = rankedOperators.findIndex(
-                    (r) => r.id === op.id,
-                  );
-                  return (
-                    <tr
-                      key={op.id}
-                      className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
+        <>
+          {/* Mobile Card View */}
+          <div className="flex flex-col gap-3 md:hidden">
+            {operators.map((op, i) => {
+              const rank = rankedOperators.findIndex((r) => r.id === op.id);
+              return (
+                <div key={op.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {rank >= 0 ? (
+                        <span
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${rank === 0
+                            ? "bg-accent text-accent-foreground"
+                            : rank === 1
+                              ? "bg-muted-foreground/20 text-foreground"
+                              : "bg-muted text-muted-foreground"
+                            }`}
+                        >
+                          {rank + 1}
+                        </span>
+                      ) : (
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-sm text-muted-foreground">
+                          {i + 1}
+                        </span>
+                      )}
+                      <div>
+                        <p className="font-semibold text-foreground">{op.name}</p>
+                        <p className="text-xs text-muted-foreground">@{op.login}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {Number(op.active_count) > 0 ? (
+                        <span className="inline-flex items-center rounded-full bg-[hsl(var(--success))]/10 px-2 py-0.5 text-[10px] font-semibold text-[hsl(var(--success))]">
+                          {op.active_count} ativa(s)
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          Inativo
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 rounded-xl bg-muted/50 p-3">
+                    <div className="text-center">
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">Producoes</p>
+                      <p className="font-mono text-sm font-bold text-foreground">{op.total_finished || 0}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">Pecas</p>
+                      <p className="font-mono text-sm font-bold text-foreground">{op.total_pieces || 0}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">Tempo Med.</p>
+                      <p className="font-mono text-sm font-bold text-foreground">
+                        {op.avg_time_per_piece_min ? `${op.avg_time_per_piece_min}min` : "-"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-3 rounded-xl bg-muted/50 p-3">
+                    <div className="text-center">
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">Melhor</p>
+                      <p className="font-mono text-sm font-bold text-[hsl(var(--success))]">
+                        {op.best_time_per_piece_min ? `${op.best_time_per_piece_min}min` : "-"}
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[10px] font-medium uppercase text-muted-foreground">Pior</p>
+                      <p className="font-mono text-sm font-bold text-destructive">
+                        {op.worst_time_per_piece_min ? `${op.worst_time_per_piece_min}min` : "-"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        setEditingUnlocks(op.id);
+                        setNewPassword("");
+                      }}
+                      className="flex h-9 items-center gap-1.5 rounded-lg bg-muted px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
                     >
-                      <td className="px-4 py-3">
-                        {rank >= 0 ? (
-                          <span
-                            className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${rank === 0
-                              ? "bg-accent text-accent-foreground"
-                              : rank === 1
-                                ? "bg-muted-foreground/20 text-foreground"
-                                : "bg-muted text-muted-foreground"
-                              }`}
-                          >
-                            {rank + 1}
-                          </span>
-                        ) : (
-                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
-                            {i + 1}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>
-                          <span className="font-semibold text-foreground">
-                            {op.name}
-                          </span>
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            @{op.login}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-center font-mono text-foreground">
-                        {op.total_finished || 0}
-                      </td>
-                      <td className="px-4 py-3 text-center font-mono text-foreground">
-                        {op.total_pieces || 0}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {op.avg_time_per_piece_min ? (
-                          <span className="font-mono font-bold text-foreground">
-                            {op.avg_time_per_piece_min}min
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            -
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {op.best_time_per_piece_min ? (
-                          <span className="font-mono font-bold text-[hsl(var(--success))]">
-                            {op.best_time_per_piece_min}min
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            -
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {op.worst_time_per_piece_min ? (
-                          <span className="font-mono font-bold text-destructive">
-                            {op.worst_time_per_piece_min}min
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            -
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {Number(op.active_count) > 0 ? (
-                          <span className="inline-flex items-center rounded-full bg-[hsl(var(--success))]/10 px-2.5 py-0.5 text-xs font-semibold text-[hsl(var(--success))]">
-                            {op.active_count} ativa(s)
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-                            Inativo
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingUnlocks(op.id);
-                              setNewPassword("");
-                            }}
-                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            title="Alterar Senha"
-                          >
-                            <Key className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => setDeletingId(op.id)}
-                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                            title="Excluir Operador"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      <Key className="h-3.5 w-3.5" />
+                      Senha
+                    </button>
+                    <button
+                      onClick={() => setDeletingId(op.id)}
+                      className="flex h-9 items-center gap-1.5 rounded-lg bg-destructive/10 px-3 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden rounded-2xl border border-border bg-card shadow-sm md:block">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted">
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">
+                      #
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-foreground">
+                      Operador
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-foreground">
+                      <span className="flex items-center justify-center gap-1">
+                        <Package className="h-3.5 w-3.5" />
+                        Producoes
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-foreground">
+                      <span className="flex items-center justify-center gap-1">
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        Pecas
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-foreground">
+                      <span className="flex items-center justify-center gap-1">
+                        <Clock className="h-3.5 w-3.5" />
+                        Tempo Med./Peca
+                      </span>
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-foreground">
+                      Melhor Tempo
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-foreground">
+                      Pior Tempo
+                    </th>
+                    <th className="px-4 py-3 text-center font-semibold text-foreground">
+                      Status
+                    </th>
+                    <th className="px-4 py-3 text-right font-semibold text-foreground">
+                      Acoes
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {operators.map((op, i) => {
+                    const rank = rankedOperators.findIndex(
+                      (r) => r.id === op.id,
+                    );
+                    return (
+                      <tr
+                        key={op.id}
+                        className="border-b border-border transition-colors last:border-0 hover:bg-muted/50"
+                      >
+                        <td className="px-4 py-3">
+                          {rank >= 0 ? (
+                            <span
+                              className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${rank === 0
+                                ? "bg-accent text-accent-foreground"
+                                : rank === 1
+                                  ? "bg-muted-foreground/20 text-foreground"
+                                  : "bg-muted text-muted-foreground"
+                                }`}
+                            >
+                              {rank + 1}
+                            </span>
+                          ) : (
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground">
+                              {i + 1}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div>
+                            <span className="font-semibold text-foreground">
+                              {op.name}
+                            </span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              @{op.login}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono text-foreground">
+                          {op.total_finished || 0}
+                        </td>
+                        <td className="px-4 py-3 text-center font-mono text-foreground">
+                          {op.total_pieces || 0}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {op.avg_time_per_piece_min ? (
+                            <span className="font-mono font-bold text-foreground">
+                              {op.avg_time_per_piece_min}min
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              -
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {op.best_time_per_piece_min ? (
+                            <span className="font-mono font-bold text-[hsl(var(--success))]">
+                              {op.best_time_per_piece_min}min
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              -
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {op.worst_time_per_piece_min ? (
+                            <span className="font-mono font-bold text-destructive">
+                              {op.worst_time_per_piece_min}min
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              -
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {Number(op.active_count) > 0 ? (
+                            <span className="inline-flex items-center rounded-full bg-[hsl(var(--success))]/10 px-2.5 py-0.5 text-xs font-semibold text-[hsl(var(--success))]">
+                              {op.active_count} ativa(s)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+                              Inativo
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setEditingUnlocks(op.id);
+                                setNewPassword("");
+                              }}
+                              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              title="Alterar Senha"
+                            >
+                              <Key className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingId(op.id)}
+                              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                              title="Excluir Operador"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Password Change Modal */}

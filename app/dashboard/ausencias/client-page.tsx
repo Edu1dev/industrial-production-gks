@@ -72,25 +72,25 @@ export default function AusenciasClientPage({ operators }: { operators: { id: nu
                 <div className="flex items-center justify-between rounded-xl bg-card p-4 shadow-sm">
                     <button
                         onClick={() => changeDate(-1)}
-                        className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 rounded-lg bg-muted px-2.5 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
                     >
                         <ChevronLeft className="h-4 w-4" />
-                        Anterior
+                        <span className="hidden sm:inline">Anterior</span>
                     </button>
                     <div className="flex items-center gap-2">
-                        <Calendar className="h-5 w-5 text-accent" />
+                        <Calendar className="hidden h-5 w-5 text-accent sm:block" />
                         <input
                             type="date"
                             value={selectedDate}
                             onChange={(e) => setSelectedDate(e.target.value)}
-                            className="rounded-lg border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                            className="rounded-lg border border-input bg-background px-2 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent sm:px-3"
                         />
                     </div>
                     <button
                         onClick={() => changeDate(1)}
-                        className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 rounded-lg bg-muted px-2.5 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
                     >
-                        Próximo
+                        <span className="hidden sm:inline">Proximo</span>
                         <ChevronRight className="h-4 w-4" />
                     </button>
                 </div>
@@ -133,66 +133,102 @@ export default function AusenciasClientPage({ operators }: { operators: { id: nu
                     </p>
                 </div>
             ) : (
-                <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-muted text-muted-foreground">
-                                <tr>
-                                    <th className="px-4 py-3 font-medium">Operador</th>
-                                    <th className="px-4 py-3 font-medium">Horário</th>
-                                    <th className="px-4 py-3 font-medium">Duração</th>
-                                    <th className="px-4 py-3 font-medium">Motivo</th>
-                                    <th className="px-4 py-3 font-medium">Peça</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-border">
-                                {logs.map((log) => (
-                                    <tr key={log.id} className="hover:bg-muted/50 transition-colors">
-                                        <td className="px-4 py-3 font-medium text-foreground">
-                                            {log.operator_name}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex flex-col">
-                                                <span className="text-[hsl(var(--warning))] font-medium">
-                                                    Saída: {formatTime(log.paused_at)}
-                                                </span>
+                <>
+                    {/* Mobile Cards */}
+                    <div className="flex flex-col gap-2 md:hidden">
+                        {logs.map((log) => (
+                            <div key={log.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                                <div className="mb-2 flex items-center justify-between">
+                                    <span className="font-medium text-foreground">{log.operator_name}</span>
+                                    {log.resumed_at ? (
+                                        <span className="rounded-full bg-accent/10 px-2 py-0.5 font-mono text-xs font-medium text-accent">
+                                            {formatDuration(log.duration_minutes)}
+                                        </span>
+                                    ) : (
+                                        <span className="rounded-full bg-[hsl(var(--warning))]/10 px-2 py-0.5 text-xs font-medium text-[hsl(var(--warning))]">
+                                            Em andamento
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="mb-2 flex items-center gap-1.5 text-sm">
+                                    <Coffee className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="text-foreground">{log.reason}</span>
+                                </div>
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                                    <span className="text-[hsl(var(--warning))]">Saida: {formatTime(log.paused_at)}</span>
+                                    {log.resumed_at ? (
+                                        <span className="text-[hsl(var(--success))]">Retorno: {formatTime(log.resumed_at)}</span>
+                                    ) : null}
+                                    {log.part_code && (
+                                        <span className="font-mono text-muted-foreground">{log.part_code}</span>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Desktop Table */}
+                    <div className="hidden overflow-hidden rounded-xl border border-border bg-card shadow-sm md:block">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-muted text-muted-foreground">
+                                    <tr>
+                                        <th className="px-4 py-3 font-medium">Operador</th>
+                                        <th className="px-4 py-3 font-medium">Horario</th>
+                                        <th className="px-4 py-3 font-medium">Duracao</th>
+                                        <th className="px-4 py-3 font-medium">Motivo</th>
+                                        <th className="px-4 py-3 font-medium">Peca</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                    {logs.map((log) => (
+                                        <tr key={log.id} className="hover:bg-muted/50 transition-colors">
+                                            <td className="px-4 py-3 font-medium text-foreground">
+                                                {log.operator_name}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[hsl(var(--warning))] font-medium">
+                                                        Saida: {formatTime(log.paused_at)}
+                                                    </span>
+                                                    {log.resumed_at ? (
+                                                        <span className="text-[hsl(var(--success))]">
+                                                            Retorno: {formatTime(log.resumed_at)}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-muted-foreground text-xs italic">
+                                                            Em andamento
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 font-mono font-medium">
                                                 {log.resumed_at ? (
-                                                    <span className="text-[hsl(var(--success))]">
-                                                        Retorno: {formatTime(log.resumed_at)}
+                                                    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-accent text-xs">
+                                                        {formatDuration(log.duration_minutes)}
                                                     </span>
                                                 ) : (
-                                                    <span className="text-muted-foreground text-xs italic">
-                                                        Em andamento
+                                                    <span className="rounded-full bg-[hsl(var(--warning))]/10 px-2 py-0.5 text-[hsl(var(--warning))] text-xs">
+                                                        -
                                                     </span>
                                                 )}
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3 font-mono font-medium">
-                                            {log.resumed_at ? (
-                                                <span className="rounded-full bg-accent/10 px-2 py-0.5 text-accent text-xs">
-                                                    {formatDuration(log.duration_minutes)}
-                                                </span>
-                                            ) : (
-                                                <span className="rounded-full bg-[hsl(var(--warning))]/10 px-2 py-0.5 text-[hsl(var(--warning))] text-xs">
-                                                    -
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-1.5">
-                                                <Coffee className="h-3.5 w-3.5 text-muted-foreground" />
-                                                {log.reason}
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-3 font-mono text-muted-foreground">
-                                            {log.part_code || "-"}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Coffee className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    {log.reason}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 font-mono text-muted-foreground">
+                                                {log.part_code || "-"}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
+                </>
             )}
         </div>
     );

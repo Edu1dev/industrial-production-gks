@@ -19,7 +19,19 @@ import {
   ChevronDown,
   ChevronUp,
   Search,
+  AlertCircle,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -173,8 +185,6 @@ export default function ProjetosPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm("Tem certeza que deseja excluir este projeto?")) return;
-
     setActionLoading(id);
     try {
       const res = await fetch(`/api/projects/${id}`, { method: "DELETE" });
@@ -183,10 +193,10 @@ export default function ProjetosPage() {
         toast.error(data.error || "Erro ao excluir");
         return;
       }
-      toast.success("Projeto excluido");
+      toast.success("Projeto excluído");
       mutate();
     } catch {
-      toast.error("Erro de conexao");
+      toast.error("Erro de conexão");
     } finally {
       setActionLoading(null);
     }
@@ -522,28 +532,14 @@ export default function ProjetosPage() {
                     {/* Action Buttons */}
                     <div className="mt-4 flex flex-wrap gap-2">
                       {project.status === "PENDENTE" && (
-                        <>
-                          <button
-                            onClick={() => startEdit(project)}
-                            disabled={actionLoading === project.id}
-                            className="flex h-10 items-center gap-1.5 rounded-lg bg-accent/10 px-4 text-sm font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
-                          >
-                            <Pencil className="h-4 w-4" />
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => handleDelete(project.id)}
-                            disabled={actionLoading === project.id}
-                            className="flex h-10 items-center gap-1.5 rounded-lg bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
-                          >
-                            {actionLoading === project.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                            Excluir
-                          </button>
-                        </>
+                        <button
+                          onClick={() => startEdit(project)}
+                          disabled={actionLoading === project.id}
+                          className="flex h-10 items-center gap-1.5 rounded-lg bg-accent/10 px-4 text-sm font-medium text-accent transition-colors hover:bg-accent/20 disabled:opacity-50"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Editar
+                        </button>
                       )}
 
                       {project.status === "FINALIZADO" && (
@@ -572,9 +568,45 @@ export default function ProjetosPage() {
                           ) : (
                             <Undo2 className="h-4 w-4" />
                           )}
-                          Reverter Ultima Operacao
+                          Reverter Ultima Operação
                         </button>
                       )}
+
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <button
+                            disabled={actionLoading === project.id}
+                            className="flex h-10 items-center gap-1.5 rounded-lg bg-destructive/10 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-50"
+                          >
+                            {actionLoading === project.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                            Excluir
+                          </button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                              <AlertCircle className="h-5 w-5" />
+                              Excluir Projeto?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja excluir o projeto <strong className="font-mono">{project.part_code}</strong>? Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDelete(project.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Sim, excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 );

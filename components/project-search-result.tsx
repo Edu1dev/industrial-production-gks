@@ -31,7 +31,7 @@ interface ProjectSearchResultProps {
     company_name: string;
     description: string;
     quantity: number;
-    estimated_time_hours: number | null;
+    estimated_time_minutes: number | null;
     charged_value_per_piece: number;
     material_cost: number;
     status: string;
@@ -153,12 +153,14 @@ export function ProjectSearchResult({
           <p className="text-xs text-muted-foreground">Quantidade</p>
           <p className="text-sm font-semibold text-foreground">{project.quantity} peca(s)</p>
         </div>
-        {project.estimated_time_hours && (
+        {project.estimated_time_minutes && (
           <div className="rounded-xl bg-muted/50 p-3">
-            <p className="text-xs text-muted-foreground">Tempo Previsto/Peca</p>
+            <p className="text-xs text-muted-foreground">Tempo Previsto/Peça</p>
             <p className="flex items-center gap-1 text-sm font-semibold text-foreground">
               <Clock className="h-3.5 w-3.5" />
-              {project.estimated_time_hours}h
+              {Number(project.estimated_time_minutes) >= 60
+                ? `${Math.floor(Number(project.estimated_time_minutes) / 60)}h ${Math.round(Number(project.estimated_time_minutes) % 60)}min`
+                : `${Number(project.estimated_time_minutes)}min`}
             </p>
           </div>
         )}
@@ -215,17 +217,17 @@ export function ProjectSearchResult({
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={() => setShowOperationSelect(true)}
-                className="flex h-14 flex-1 items-center justify-center gap-2 rounded-xl bg-[hsl(var(--success))] text-base font-bold text-[hsl(var(--success-foreground))] transition-all hover:opacity-90"
+                className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-[hsl(var(--success))] px-6 text-base font-bold text-[hsl(var(--success-foreground))] transition-all hover:opacity-90"
               >
                 <Play className="h-5 w-5" />
-                Iniciar Producao
+                Iniciar Produção
               </button>
 
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <button
                     disabled={loading}
-                    className="flex h-14 items-center justify-center gap-2 rounded-xl bg-destructive text-base font-bold text-destructive-foreground transition-all hover:opacity-90 disabled:opacity-50 sm:w-auto sm:px-8"
+                    className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-destructive px-6 text-base font-bold text-destructive-foreground transition-all hover:opacity-90 disabled:opacity-50"
                   >
                     {loading ? (
                       <Loader2 className="h-5 w-5 animate-spin" />

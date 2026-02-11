@@ -73,16 +73,16 @@ export function ProductionControls({ record }: ProductionControlsProps) {
       }
 
       const messages: Record<string, string> = {
-        pause: "Producao pausada",
-        resume: "Producao retomada",
-        finish: "Producao finalizada!",
+        pause: "Produção pausada",
+        resume: "Produção retomada",
+        finish: "Produção finalizada!",
       };
 
-      toast.success(messages[action] || "Acao realizada");
+      toast.success(messages[action] || "Ação realizada");
       mutate("/api/dashboard");
       mutate((key: string) => typeof key === "string" && key.startsWith("/api/production"), undefined, { revalidate: true });
     } catch {
-      toast.error("Erro de conexao");
+      toast.error("Erro de conexão");
     } finally {
       setLoading(null);
     }
@@ -132,7 +132,7 @@ export function ProductionControls({ record }: ProductionControlsProps) {
 
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch {
-        toast.error("Erro de conexao");
+        toast.error("Erro de conexão");
         setLoading(null);
         return;
       } finally {
@@ -150,7 +150,7 @@ export function ProductionControls({ record }: ProductionControlsProps) {
   };
 
   const statusLabels: Record<string, string> = {
-    EM_PRODUCAO: "Em Producao",
+    EM_PRODUCAO: "Em Produção",
     PAUSADO: "Pausado",
     FINALIZADO: "Finalizado",
   };
@@ -269,7 +269,7 @@ export function ProductionControls({ record }: ProductionControlsProps) {
           <DialogHeader>
             <DialogTitle>Motivo da Pausa</DialogTitle>
             <DialogDescription>
-              Selecione o motivo da pausa para a peça <strong className="font-mono">{record.part_code}</strong>
+              Selecione o motivo da pausa para a peça <strong className="font-mono">{record.part_code}</strong>.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-3">
@@ -399,7 +399,7 @@ export function StartProductionForm({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.part_code || !form.operation_id || !form.quantity) {
-      toast.error("Preencha codigo da peca, operacao e quantidade");
+      toast.error("Preencha código da peça, operação e quantidade");
       return;
     }
 
@@ -434,11 +434,11 @@ export function StartProductionForm({
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || "Erro ao iniciar producao");
+        toast.error(data.error || "Erro ao iniciar produção");
         return;
       }
 
-      toast.success(`Producao iniciada: ${data.part.code}`);
+      toast.success(`Produção iniciada: ${data.part.code}`);
       setForm({
         part_code: "",
         part_description: "",
@@ -451,7 +451,7 @@ export function StartProductionForm({
       });
       onStarted();
     } catch {
-      toast.error("Erro de conexao");
+      toast.error("Erro de conexão");
     } finally {
       setLoading(false);
     }
@@ -464,7 +464,7 @@ export function StartProductionForm({
     >
       <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-card-foreground">
         <Play className="h-5 w-5 text-[hsl(var(--success))]" />
-        Iniciar Nova Producao
+        Iniciar Nova Produção
       </h2>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -474,7 +474,7 @@ export function StartProductionForm({
             htmlFor="part_code"
             className="mb-1.5 block text-sm font-medium text-card-foreground"
           >
-            Codigo da Peca *
+            Código da Peça *
           </label>
           <input
             id="part_code"
@@ -494,7 +494,7 @@ export function StartProductionForm({
             htmlFor="part_description"
             className="mb-1.5 block text-sm font-medium text-card-foreground"
           >
-            Descricao da Peca
+            Descrição da Peça
           </label>
           <input
             id="part_description"
@@ -503,7 +503,7 @@ export function StartProductionForm({
             onChange={(e) =>
               setForm({ ...form, part_description: e.target.value })
             }
-            placeholder="Descricao opcional"
+            placeholder="Descrição opcional"
             className="h-14 w-full rounded-xl border border-input bg-background px-4 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
           />
         </div>
@@ -538,7 +538,7 @@ export function StartProductionForm({
             htmlFor="operation"
             className="mb-1.5 block text-sm font-medium text-card-foreground"
           >
-            Operacao *
+            Operação *
           </label>
           <select
             id="operation"
@@ -625,7 +625,7 @@ export function StartProductionForm({
             htmlFor="material_cost"
             className="mb-1.5 block text-sm font-medium text-card-foreground"
           >
-            Custo Materia-Prima (R$)
+            Custo Matéria-Prima (R$)
           </label>
           <input
             id="material_cost"
@@ -652,7 +652,7 @@ export function StartProductionForm({
         ) : (
           <Play className="h-6 w-6" />
         )}
-        INICIAR PRODUCAO
+        INICIAR PRODUÇÃO
       </button>
     </form>
   );

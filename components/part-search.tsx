@@ -184,7 +184,7 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
                 <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
                   Resumo da Peça
                 </p>
-                <div className="flex flex-wrap items-center gap-4">
+                <div className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-4">
                   <div>
                     <p className="text-[10px] font-medium uppercase text-muted-foreground">
                       Tempo Total
@@ -193,7 +193,7 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
                       {totalTimeMin.toFixed(2)} min
                     </p>
                   </div>
-                  <div className="h-8 w-px bg-border"></div>
+                  <div className="hidden h-8 w-px bg-border sm:block"></div>
                   <div>
                     <p className="text-[10px] font-medium uppercase text-muted-foreground">
                       Qtd Total
@@ -202,7 +202,7 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
                       {totalQuantity}
                     </p>
                   </div>
-                  <div className="h-8 w-px bg-border"></div>
+                  <div className="hidden h-8 w-px bg-border sm:block"></div>
                   <div>
                     <p className="text-[10px] font-medium uppercase text-muted-foreground">
                       Valor Cobrado
@@ -211,7 +211,7 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
                       R$ {totalCharged.toFixed(2)}
                     </p>
                   </div>
-                  <div className="h-8 w-px bg-border"></div>
+                  <div className="hidden h-8 w-px bg-border sm:block"></div>
                   <div>
                     <p className="text-[10px] font-medium uppercase text-muted-foreground">
                       Real / Min
@@ -266,94 +266,136 @@ export function PartSearch({ isAdmin }: { isAdmin: boolean }) {
           })()}
 
 
-          {/* History Table */}
+          {/* History */}
           {history.length > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-border">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted">
-                    <th className="px-3 py-2.5 text-left font-semibold text-foreground">
-                      Data
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-foreground">
-                      Operacao
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-semibold text-foreground">
-                      Operador
-                    </th>
-                    <th className="px-3 py-2.5 text-center font-semibold text-foreground">
-                      Qtd
-                    </th>
-                    {isAdmin && (
-                      <>
-                        <th className="px-3 py-2.5 text-center font-semibold text-foreground">
-                          Tempo Total
-                        </th>
-                        <th className="px-3 py-2.5 text-center font-semibold text-foreground">
-                          Tempo/Peca
-                        </th>
-                      </>
-                    )}
-                    <th className="px-3 py-2.5 text-center font-semibold text-foreground">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((rec) => {
-                    const totalTime = calculateProductionTime(rec);
-                    const timePerPiece =
-                      rec.quantity > 0 ? totalTime / rec.quantity : 0;
-
-                    return (
-                      <tr
-                        key={rec.id}
-                        className="border-b border-border last:border-0"
-                      >
-                        <td className="whitespace-nowrap px-3 py-2.5 text-foreground">
-                          {new Date(rec.start_time).toLocaleDateString("pt-BR")}
-                        </td>
-                        <td className="px-3 py-2.5 text-foreground">
-                          {rec.operation_name}
-                        </td>
-                        <td className="px-3 py-2.5 text-foreground">
-                          {rec.operator_name}
-                        </td>
-                        <td className="px-3 py-2.5 text-center text-foreground">
-                          {rec.quantity}
-                        </td>
-                        {isAdmin && (
-                          <>
-                            <td className="px-3 py-2.5 text-center font-mono text-foreground">
-                              {rec.end_time ? formatDuration(totalTime) : "-"}
-                            </td>
-                            <td className="px-3 py-2.5 text-center font-mono text-foreground">
-                              {rec.end_time ? formatDuration(timePerPiece) : "-"}
-                            </td>
-                          </>
-                        )}
-                        <td className="px-3 py-2.5 text-center">
+            <>
+              {/* Mobile Cards */}
+              <div className="flex flex-col gap-2 md:hidden">
+                {history.map((rec) => {
+                  const totalTime = calculateProductionTime(rec);
+                  const timePerPiece = rec.quantity > 0 ? totalTime / rec.quantity : 0;
+                  return (
+                    <div key={rec.id} className="rounded-xl border border-border bg-background p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(rec.start_time).toLocaleDateString("pt-BR")}
+                          </span>
                           <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${rec.status === "FINALIZADO"
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${rec.status === "FINALIZADO"
                               ? "bg-muted text-muted-foreground"
                               : rec.status === "EM_PRODUCAO"
                                 ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
                                 : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
                               }`}
                           >
-                            {rec.status === "EM_PRODUCAO"
-                              ? "Producao"
-                              : rec.status === "PAUSADO"
-                                ? "Pausado"
-                                : "Finalizado"}
+                            {rec.status === "EM_PRODUCAO" ? "Producao" : rec.status === "PAUSADO" ? "Pausado" : "Finalizado"}
                           </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                        <span className="text-sm font-medium text-foreground">Qtd: {rec.quantity}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{rec.operation_name}</span>
+                        <span>{rec.operator_name}</span>
+                        {isAdmin && rec.end_time && (
+                          <>
+                            <span className="font-mono">{formatDuration(totalTime)}</span>
+                            <span className="font-mono">{formatDuration(timePerPiece)}/pc</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Desktop Table */}
+              <div className="hidden overflow-x-auto rounded-xl border border-border md:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted">
+                      <th className="px-3 py-2.5 text-left font-semibold text-foreground">
+                        Data
+                      </th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-foreground">
+                        Operacao
+                      </th>
+                      <th className="px-3 py-2.5 text-left font-semibold text-foreground">
+                        Operador
+                      </th>
+                      <th className="px-3 py-2.5 text-center font-semibold text-foreground">
+                        Qtd
+                      </th>
+                      {isAdmin && (
+                        <>
+                          <th className="px-3 py-2.5 text-center font-semibold text-foreground">
+                            Tempo Total
+                          </th>
+                          <th className="px-3 py-2.5 text-center font-semibold text-foreground">
+                            Tempo/Peca
+                          </th>
+                        </>
+                      )}
+                      <th className="px-3 py-2.5 text-center font-semibold text-foreground">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map((rec) => {
+                      const totalTime = calculateProductionTime(rec);
+                      const timePerPiece =
+                        rec.quantity > 0 ? totalTime / rec.quantity : 0;
+
+                      return (
+                        <tr
+                          key={rec.id}
+                          className="border-b border-border last:border-0"
+                        >
+                          <td className="whitespace-nowrap px-3 py-2.5 text-foreground">
+                            {new Date(rec.start_time).toLocaleDateString("pt-BR")}
+                          </td>
+                          <td className="px-3 py-2.5 text-foreground">
+                            {rec.operation_name}
+                          </td>
+                          <td className="px-3 py-2.5 text-foreground">
+                            {rec.operator_name}
+                          </td>
+                          <td className="px-3 py-2.5 text-center text-foreground">
+                            {rec.quantity}
+                          </td>
+                          {isAdmin && (
+                            <>
+                              <td className="px-3 py-2.5 text-center font-mono text-foreground">
+                                {rec.end_time ? formatDuration(totalTime) : "-"}
+                              </td>
+                              <td className="px-3 py-2.5 text-center font-mono text-foreground">
+                                {rec.end_time ? formatDuration(timePerPiece) : "-"}
+                              </td>
+                            </>
+                          )}
+                          <td className="px-3 py-2.5 text-center">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${rec.status === "FINALIZADO"
+                                ? "bg-muted text-muted-foreground"
+                                : rec.status === "EM_PRODUCAO"
+                                  ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+                                  : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+                                }`}
+                            >
+                              {rec.status === "EM_PRODUCAO"
+                                ? "Producao"
+                                : rec.status === "PAUSADO"
+                                  ? "Pausado"
+                                  : "Finalizado"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : searched && !part ? (
             <p className="text-center text-sm text-muted-foreground">
               Peca nao encontrada. Inicie uma producao para criar.

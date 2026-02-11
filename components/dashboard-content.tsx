@@ -183,7 +183,7 @@ export function DashboardContent({ operator }: DashboardContentProps) {
               <Search className="h-5 w-5 text-accent" />
               Buscar Projeto
             </h2>
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <input
                 type="text"
                 value={projectSearchCode}
@@ -195,12 +195,12 @@ export function DashboardContent({ operator }: DashboardContentProps) {
                   }
                 }}
                 placeholder="Codigo da peca (ex: PCA-001)"
-                className="h-14 flex-1 rounded-xl border border-input bg-background px-4 font-mono text-lg font-bold text-foreground uppercase placeholder:text-muted-foreground placeholder:font-normal placeholder:text-base focus:outline-none focus:ring-2 focus:ring-accent"
+                className="h-14 w-full rounded-xl border border-input bg-background px-4 font-mono text-lg font-bold text-foreground uppercase placeholder:text-muted-foreground placeholder:font-normal placeholder:text-base focus:outline-none focus:ring-2 focus:ring-accent sm:flex-1"
               />
               <button
                 onClick={handleProjectSearch}
                 disabled={projectSearchLoading}
-                className="flex h-14 items-center gap-2 rounded-xl bg-accent px-6 font-bold text-accent-foreground transition-all hover:opacity-90 disabled:opacity-50"
+                className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-6 font-bold text-accent-foreground transition-all hover:opacity-90 disabled:opacity-50"
               >
                 {projectSearchLoading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -244,7 +244,48 @@ export function DashboardContent({ operator }: DashboardContentProps) {
                 <Award className="h-5 w-5 text-accent" />
                 Ranking de Operadores
               </h2>
-              <div className="overflow-x-auto rounded-xl border border-border">
+              {/* Mobile Cards */}
+              <div className="flex flex-col gap-2 md:hidden">
+                {rankings.map(
+                  (
+                    r: {
+                      operator_id: number;
+                      operator_name: string;
+                      total_records: number;
+                      avg_time_per_piece_min: number;
+                      best_time_per_piece_min: number;
+                    },
+                    i: number,
+                  ) => (
+                    <div key={r.operator_id} className="flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                      <span
+                        className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${i === 0
+                          ? "bg-accent text-accent-foreground"
+                          : i === 1
+                            ? "bg-muted text-foreground"
+                            : "bg-muted text-muted-foreground"
+                          }`}
+                      >
+                        {i + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium text-foreground">{r.operator_name}</p>
+                        <p className="text-xs text-muted-foreground">{r.total_records} producoes</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-mono text-sm font-bold text-foreground">
+                          {r.avg_time_per_piece_min ? `${r.avg_time_per_piece_min}min` : "-"}
+                        </p>
+                        <p className="font-mono text-xs text-[hsl(var(--success))]">
+                          {r.best_time_per_piece_min ? `${r.best_time_per_piece_min}min` : "-"}
+                        </p>
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+              {/* Desktop Table */}
+              <div className="hidden overflow-x-auto rounded-xl border border-border md:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted">
@@ -325,7 +366,46 @@ export function DashboardContent({ operator }: DashboardContentProps) {
                 <TrendingUp className="h-5 w-5 text-accent" />
                 Pecas Repetidas - Comparacao
               </h2>
-              <div className="overflow-x-auto rounded-xl border border-border">
+              {/* Mobile Cards */}
+              <div className="flex flex-col gap-2 md:hidden">
+                {repeatedParts.map(
+                  (p: {
+                    part_code: string;
+                    description?: string;
+                    production_count: number;
+                    best_time_min: number;
+                    worst_time_min: number;
+                  }) => (
+                    <div key={p.part_code} className="rounded-xl border border-border bg-background p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <div className="min-w-0">
+                          <span className="font-mono font-bold text-foreground">{p.part_code}</span>
+                          {p.description && (
+                            <span className="ml-1.5 text-xs text-muted-foreground">{p.description}</span>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-xs text-muted-foreground">{p.production_count}x</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="rounded-lg bg-muted/50 p-2 text-center">
+                          <p className="text-[10px] font-medium uppercase text-muted-foreground">Melhor</p>
+                          <p className="font-mono text-sm font-bold text-[hsl(var(--success))]">
+                            {p.best_time_min ? `${p.best_time_min}min` : "-"}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-muted/50 p-2 text-center">
+                          <p className="text-[10px] font-medium uppercase text-muted-foreground">Pior</p>
+                          <p className="font-mono text-sm font-bold text-destructive">
+                            {p.worst_time_min ? `${p.worst_time_min}min` : "-"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+              {/* Desktop Table */}
+              <div className="hidden overflow-x-auto rounded-xl border border-border md:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted">
@@ -393,7 +473,59 @@ export function DashboardContent({ operator }: DashboardContentProps) {
                 <Clock className="h-5 w-5 text-muted-foreground" />
                 Ultimos Apontamentos
               </h2>
-              <div className="overflow-x-auto rounded-xl border border-border">
+              {/* Mobile Cards */}
+              <div className="flex flex-col gap-2 md:hidden">
+                {recentRecords.map(
+                  (rec: {
+                    id: number;
+                    part_code: string;
+                    operation_name: string;
+                    operator_name: string;
+                    quantity: number;
+                    start_time: string;
+                    end_time?: string;
+                    total_pause_ms: number;
+                    status: string;
+                    company_name?: string;
+                  }) => {
+                    let timeStr = "-";
+                    if (rec.end_time) {
+                      const start = new Date(rec.start_time).getTime();
+                      const end = new Date(rec.end_time).getTime();
+                      const total = end - start - (rec.total_pause_ms || 0);
+                      timeStr = formatDuration(total);
+                    }
+                    return (
+                      <div key={rec.id} className="rounded-xl border border-border bg-background p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-foreground">{rec.part_code}</span>
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${rec.status === "FINALIZADO"
+                                ? "bg-muted text-muted-foreground"
+                                : rec.status === "EM_PRODUCAO"
+                                  ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+                                  : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+                                }`}
+                            >
+                              {rec.status === "EM_PRODUCAO" ? "Producao" : rec.status === "PAUSADO" ? "Pausado" : "Finalizado"}
+                            </span>
+                          </div>
+                          <span className="font-mono text-sm font-bold text-foreground">{timeStr}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          {rec.company_name && <span>{rec.company_name}</span>}
+                          <span>{rec.operation_name}</span>
+                          <span>{rec.operator_name}</span>
+                          <span>Qtd: {rec.quantity}</span>
+                        </div>
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+              {/* Desktop Table */}
+              <div className="hidden overflow-x-auto rounded-xl border border-border md:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted">

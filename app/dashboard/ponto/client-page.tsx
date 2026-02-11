@@ -144,26 +144,26 @@ export default function PontoPage({ operators }: { operators: { id: number; name
                 <div className="flex items-center justify-between rounded-xl bg-card p-4 shadow-sm">
                     <button
                         onClick={() => changeDate(-1)}
-                        className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 rounded-lg bg-muted px-2.5 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
                     >
                         <ChevronLeft className="h-4 w-4" />
-                        Anterior
+                        <span className="hidden sm:inline">Anterior</span>
                     </button>
 
                     <div className="flex items-center gap-2 text-sm font-medium">
-                        <Calendar className="h-5 w-5 text-accent" />
+                        <Calendar className="hidden h-5 w-5 text-accent sm:block" />
                         {viewMode === "daily" ? (
                             <input
                                 type="date"
                                 value={selectedDate}
                                 onChange={(e) => setSelectedDate(e.target.value)}
-                                className="rounded-lg border border-input bg-background px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+                                className="rounded-lg border border-input bg-background px-2 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent sm:px-3"
                             />
                         ) : (
                             <div className="flex flex-col items-center">
-                                <span>Semana de</span>
-                                <span className="text-muted-foreground text-xs">
-                                    {startDate ? new Date(startDate + "T00:00:00").toLocaleDateString('pt-BR') : '-'} até {endDate ? new Date(endDate + "T00:00:00").toLocaleDateString('pt-BR') : '-'}
+                                <span className="text-xs sm:text-sm">Semana de</span>
+                                <span className="text-muted-foreground text-[10px] sm:text-xs">
+                                    {startDate ? new Date(startDate + "T00:00:00").toLocaleDateString('pt-BR') : '-'} ate {endDate ? new Date(endDate + "T00:00:00").toLocaleDateString('pt-BR') : '-'}
                                 </span>
                             </div>
                         )}
@@ -171,9 +171,9 @@ export default function PontoPage({ operators }: { operators: { id: number; name
 
                     <button
                         onClick={() => changeDate(1)}
-                        className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 rounded-lg bg-muted px-2.5 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
                     >
-                        Próximo
+                        <span className="hidden sm:inline">Proximo</span>
                         <ChevronRight className="h-4 w-4" />
                     </button>
                 </div>
@@ -197,18 +197,18 @@ export default function PontoPage({ operators }: { operators: { id: number; name
             </div>
 
             {/* Summary Box */}
-            <div className="mb-6 rounded-xl bg-gradient-to-r from-accent/20 to-primary/20 p-6 shadow-sm">
+            <div className="mb-6 rounded-xl bg-gradient-to-r from-accent/20 to-primary/20 p-4 shadow-sm sm:p-6">
                 <div className="flex items-center justify-between">
                     <div>
                         <p className="text-xs font-medium uppercase text-muted-foreground">
                             {viewMode === "daily" ? "Total do Dia" : "Total da Semana"}
                         </p>
-                        <p className="text-3xl font-bold text-foreground">
+                        <p className="text-2xl font-bold text-foreground sm:text-3xl">
                             {formatMinutes(totalMinutes)}
                         </p>
                     </div>
-                    <div className="rounded-full bg-accent/20 p-4">
-                        <Timer className="h-8 w-8 text-accent" />
+                    <div className="rounded-full bg-accent/20 p-3 sm:p-4">
+                        <Timer className="h-6 w-6 text-accent sm:h-8 sm:w-8" />
                     </div>
                 </div>
                 {viewMode === "daily" && (

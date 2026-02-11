@@ -121,6 +121,7 @@ export async function PATCH(
 
   try {
     const updated = await sql`
+      UPDATE projects
       SET part_code = COALESCE(${part_code ? part_code.toUpperCase() : null}, part_code),
           company_id = COALESCE(${company_id || null}::int, company_id),
           quantity = COALESCE(${quantity || null}::int, quantity),
@@ -169,17 +170,27 @@ export async function DELETE(
     return NextResponse.json({ error: "Projeto nao encontrado" }, { status: 404 });
   }
 
-  if (existing[0].status !== "PENDENTE") {
-    return NextResponse.json({ error: "Apenas projetos pendentes podem ser excluidos" }, { status: 400 });
-  }
+  const projectId = parseInt(id);
 
-  // Check if there are production records linked
-  const records = await sql`SELECT COUNT(*)::int as count FROM production_records WHERE project_id = ${parseInt(id)}`;
-  if (records[0].count > 0) {
-    return NextResponse.json({ error: "Projeto possui producoes vinculadas e nao pode ser excluido" }, { status: 400 });
-  }
+  // Delete linked pause_logs
+  await sql`
+    DELETE FROM pause_logs WHERE production_record_id IN (
+      SELECT id FROM production_records WHERE project_id = ${projectId}
+    )
+  `;
 
-  await sql`DELETE FROM projects WHERE id = ${parseInt(id)}`;
+  // Delete linked time_records
+  await sql`
+    DELETE FROM time_records WHERE production_record_id IN (
+      SELECT id FROM production_records WHERE project_id = ${projectId}
+    )
+  `;
+
+  // Delete linked production records
+  await sql`DELETE FROM production_records WHERE project_id = ${projectId}`;
+
+  // Delete the project
+  await sql`DELETE FROM projects WHERE id = ${projectId}`;
 
   return NextResponse.json({ success: true });
 }

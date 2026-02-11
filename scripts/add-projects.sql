@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS projects (
   company_id INTEGER NOT NULL REFERENCES companies(id),
   description TEXT,
   quantity INTEGER NOT NULL DEFAULT 1,
-  estimated_time_hours DECIMAL(10,2),
+  estimated_time_minutes DECIMAL(10,2),
   charged_value_per_piece DECIMAL(12,2) NOT NULL DEFAULT 0,
   material_cost DECIMAL(12,2) DEFAULT 0,
   status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE'

@@ -6,7 +6,6 @@ import { useState, useCallback, useMemo } from "react";
 import {
   History,
   Search,
-  Filter,
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -14,8 +13,11 @@ import {
   ChevronRight as ChevronExpand,
   DollarSign,
   Clock,
-  X,
   Layers,
+  Pause,
+  Building2,
+  Calendar,
+  Users,
 } from "lucide-react";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
@@ -47,6 +49,15 @@ interface HistoryRecord {
   operation_sequence?: number;
 }
 
+interface PauseLog {
+  id: number;
+  production_record_id: number;
+  reason: string;
+  paused_at: string;
+  resumed_at: string | null;
+  duration_min: number | null;
+}
+
 interface DisplayRow {
   record: HistoryRecord;
   isGroup: boolean;
@@ -54,73 +65,75 @@ interface DisplayRow {
   subRows: HistoryRecord[];
 }
 
-const PAGE_SIZE = 20;
+interface CompanyGroup {
+  companyName: string;
+  companyId: number | null;
+  rows: DisplayRow[];
+  totalCharged: number;
+  totalMachineCost: number;
+  totalParts: number;
+}
+
+const MONTH_NAMES = [
+  "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
 
 export default function HistoricoPage() {
-  const [filters, setFilters] = useState({
-    operator_id: "",
-    part_code: "",
-    status: "",
-    date_from: "",
-    date_to: "",
-    company_id: "",
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
   });
-  const [appliedFilters, setAppliedFilters] = useState(filters);
-  const [page, setPage] = useState(0);
-  const [showFilters, setShowFilters] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
+  const [selectedOperator, setSelectedOperator] = useState("all");
+  const [searchPart, setSearchPart] = useState("");
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const [pauseCache, setPauseCache] = useState<Record<string, PauseLog[]>>({});
 
   const { data: operatorsData } = useSWR("/api/operators", fetcher);
   const operators = operatorsData?.operators || [];
   const { data: companiesData } = useSWR("/api/companies", fetcher);
   const companies = companiesData?.companies || [];
 
+  const dateRange = useMemo(() => {
+    const start = new Date(selectedMonth.year, selectedMonth.month, 1);
+    const end = new Date(selectedMonth.year, selectedMonth.month + 1, 0);
+    return {
+      from: start.toISOString().split("T")[0],
+      to: end.toISOString().split("T")[0],
+    };
+  }, [selectedMonth]);
+
   const buildUrl = useCallback(() => {
     const params = new URLSearchParams();
-    if (appliedFilters.operator_id)
-      params.set("operator_id", appliedFilters.operator_id);
-    if (appliedFilters.part_code)
-      params.set("part_code", appliedFilters.part_code);
-    if (appliedFilters.status) params.set("status", appliedFilters.status);
-    if (appliedFilters.date_from)
-      params.set("date_from", appliedFilters.date_from);
-    if (appliedFilters.date_to) params.set("date_to", appliedFilters.date_to);
-    if (appliedFilters.company_id)
-      params.set("company_id", appliedFilters.company_id);
-    params.set("limit", String(PAGE_SIZE));
-    params.set("offset", String(page * PAGE_SIZE));
+    params.set("date_from", dateRange.from);
+    params.set("date_to", dateRange.to);
+    if (selectedOperator !== "all") params.set("operator_id", selectedOperator);
+    if (searchPart.trim()) params.set("part_code", searchPart.trim());
+    params.set("limit", "1000");
+    params.set("offset", "0");
     return `/api/history?${params.toString()}`;
-  }, [appliedFilters, page]);
+  }, [dateRange, selectedOperator, searchPart]);
 
   const { data, isLoading } = useSWR(buildUrl(), fetcher);
   const records: HistoryRecord[] = data?.records || [];
   const total: number = data?.total || 0;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  // Group records by group_id. API already returns groups together and sorted by operation_sequence.
   const displayRows: DisplayRow[] = useMemo(() => {
     const groupMap = new Map<number, HistoryRecord[]>();
     const rows: DisplayRow[] = [];
     const seenGroups = new Set<number>();
 
-    // Collect group members
     records.forEach((rec) => {
       if (rec.group_id) {
-        if (!groupMap.has(rec.group_id)) {
-          groupMap.set(rec.group_id, []);
-        }
+        if (!groupMap.has(rec.group_id)) groupMap.set(rec.group_id, []);
         groupMap.get(rec.group_id)!.push(rec);
       }
     });
 
-    // Sort each group by operation_sequence (API already does this, but ensure)
     groupMap.forEach((group) => {
-      group.sort(
-        (a, b) => (a.operation_sequence || 0) - (b.operation_sequence || 0),
-      );
+      group.sort((a, b) => (a.operation_sequence || 0) - (b.operation_sequence || 0));
     });
 
-    // Build display rows preserving API order
     records.forEach((rec) => {
       if (rec.group_id) {
         if (seenGroups.has(rec.group_id)) return;
@@ -133,705 +146,571 @@ export default function HistoricoPage() {
           subRows: group.slice(1),
         });
       } else {
-        rows.push({
-          record: rec,
-          isGroup: false,
-          groupSize: 1,
-          subRows: [],
-        });
+        rows.push({ record: rec, isGroup: false, groupSize: 1, subRows: [] });
       }
     });
 
     return rows;
   }, [records]);
 
-  function toggleGroup(groupId: number) {
-    setExpandedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
-      return next;
+  // Group by company
+  const companyGroups: CompanyGroup[] = useMemo(() => {
+    const map = new Map<string, DisplayRow[]>();
+
+    displayRows.forEach((row) => {
+      const key = row.record.company_name || "Sem Empresa";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(row);
     });
+
+    const groups: CompanyGroup[] = [];
+    map.forEach((rows, companyName) => {
+      const totalCharged = rows.reduce(
+        (sum, r) => sum + Number(r.record.charged_value || 0) * (r.record.quantity || 0),
+        0,
+      );
+      const allRecs = rows.flatMap((r) => [r.record, ...r.subRows]);
+      const finished = allRecs.filter((r) => r.status === "FINALIZADO");
+      const totalMachineCost = finished.reduce(
+        (sum, r) => sum + (Number(r.machine_cost) || 0),
+        0,
+      );
+      groups.push({
+        companyName,
+        companyId: rows[0].record.company_id || null,
+        rows,
+        totalCharged,
+        totalMachineCost,
+        totalParts: rows.length,
+      });
+    });
+
+    groups.sort((a, b) => a.companyName.localeCompare(b.companyName));
+    return groups;
+  }, [displayRows]);
+
+  // Global totals
+  const globalTotalCharged = companyGroups.reduce((s, g) => s + g.totalCharged, 0);
+  const globalTotalMachineCost = companyGroups.reduce((s, g) => s + g.totalMachineCost, 0);
+
+  function changeMonth(delta: number) {
+    setSelectedMonth((prev) => {
+      let m = prev.month + delta;
+      let y = prev.year;
+      if (m < 0) { m = 11; y--; }
+      if (m > 11) { m = 0; y++; }
+      return { year: y, month: m };
+    });
+    setExpandedCards(new Set());
+    setPauseCache({});
   }
 
-  function applyFilters() {
-    setAppliedFilters(filters);
-    setPage(0);
+  function getCardKey(row: DisplayRow) {
+    return row.record.group_id ? `g-${row.record.group_id}` : `s-${row.record.id}`;
   }
 
-  function clearFilters() {
-    const empty = {
-      operator_id: "",
-      part_code: "",
-      status: "",
-      date_from: "",
-      date_to: "",
-      company_id: "",
-    };
-    setFilters(empty);
-    setAppliedFilters(empty);
-    setPage(0);
+  async function toggleCard(row: DisplayRow) {
+    const key = getCardKey(row);
+    const next = new Set(expandedCards);
+
+    if (next.has(key)) {
+      next.delete(key);
+      setExpandedCards(next);
+      return;
+    }
+
+    next.add(key);
+    setExpandedCards(next);
+
+    if (!pauseCache[key]) {
+      const allRecords = [row.record, ...row.subRows];
+      const ids = allRecords.map((r) => r.id).join(",");
+      try {
+        const res = await fetch(`/api/history/pauses?record_ids=${ids}`);
+        const d = await res.json();
+        setPauseCache((prev) => ({ ...prev, [key]: d.pauses || [] }));
+      } catch {
+        setPauseCache((prev) => ({ ...prev, [key]: [] }));
+      }
+    }
   }
-
-  const hasActiveFilters = Object.values(appliedFilters).some((v) => v !== "");
-
-  // Summary stats — only count head records (one per group) for charged values
-  const allFinished = records.filter((r) => r.status === "FINALIZADO");
-  const avgTimePP =
-    allFinished.length > 0
-      ? (
-        allFinished.reduce(
-          (sum, r) => sum + (Number(r.time_per_piece_min) || 0),
-          0,
-        ) / allFinished.length
-      ).toFixed(2)
-      : null;
-  const totalMachineCost = allFinished.reduce(
-    (sum, r) => sum + (Number(r.machine_cost) || 0),
-    0,
-  );
-  // Charged value: only from head records (first operation per group)
-  const totalCharged = displayRows.reduce(
-    (sum, row) =>
-      sum + Number(row.record.charged_value || 0) * (row.record.quantity || 0),
-    0,
-  );
-  // Material cost: only from head records (belongs to group, not individual operations)
-  const totalMaterialCostSum = displayRows.reduce(
-    (sum, row) => sum + (Number(row.record.total_material_cost) || 0),
-    0,
-  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
-      {/* Page Header */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-            <History className="h-6 w-6 text-accent" />
-            Historico de Producao
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {total} registro(s) encontrado(s)
-          </p>
-        </div>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={`flex h-12 items-center gap-2 rounded-xl px-5 font-bold transition-all ${hasActiveFilters
-            ? "bg-accent text-accent-foreground"
-            : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-            }`}
-        >
-          <Filter className="h-5 w-5" />
-          Filtros
-          {hasActiveFilters && (
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-accent-foreground/20 text-xs">
-              {Object.values(appliedFilters).filter((v) => v !== "").length}
-            </span>
-          )}
-        </button>
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+          <History className="h-6 w-6 text-accent" />
+          Historico de Producao
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {total} registro(s) em {MONTH_NAMES[selectedMonth.month]}
+        </p>
       </div>
 
-      {/* Filters Panel */}
-      {showFilters && (
-        <div className="mb-6 rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-card-foreground">Filtros</h2>
-            {hasActiveFilters && (
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-1.5 text-sm font-medium text-destructive hover:underline"
-              >
-                <X className="h-4 w-4" />
-                Limpar filtros
-              </button>
-            )}
-          </div>
+      {/* Month Navigator + Filters */}
+      <div className="mb-6 grid gap-3 sm:gap-4 md:grid-cols-2">
+        {/* Month Selector */}
+        <div className="flex items-center justify-between rounded-xl bg-card p-4 shadow-sm">
+          <button
+            onClick={() => changeMonth(-1)}
+            className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label
-                htmlFor="filter_company"
-                className="mb-1.5 block text-sm font-medium text-card-foreground"
-              >
-                Empresa
-              </label>
-              <select
-                id="filter_company"
-                value={filters.company_id}
-                onChange={(e) =>
-                  setFilters({ ...filters, company_id: e.target.value })
-                }
-                className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              >
-                <option value="">Todas</option>
-                {companies.map((c: { id: number; name: string }) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="filter_operator"
-                className="mb-1.5 block text-sm font-medium text-card-foreground"
-              >
-                Operador
-              </label>
-              <select
-                id="filter_operator"
-                value={filters.operator_id}
-                onChange={(e) =>
-                  setFilters({ ...filters, operator_id: e.target.value })
-                }
-                className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              >
-                <option value="">Todos</option>
-                {operators.map((op: { id: number; name: string }) => (
-                  <option key={op.id} value={op.id}>
-                    {op.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="filter_part"
-                className="mb-1.5 block text-sm font-medium text-card-foreground"
-              >
-                Codigo da Peca
-              </label>
-              <input
-                id="filter_part"
-                type="text"
-                value={filters.part_code}
-                onChange={(e) =>
-                  setFilters({
-                    ...filters,
-                    part_code: e.target.value.toUpperCase(),
-                  })
-                }
-                placeholder="Ex: PCA-001"
-                className="h-12 w-full rounded-xl border border-input bg-background px-3 font-mono text-sm text-foreground uppercase placeholder:font-sans placeholder:normal-case placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="filter_status"
-                className="mb-1.5 block text-sm font-medium text-card-foreground"
-              >
-                Status
-              </label>
-              <select
-                id="filter_status"
-                value={filters.status}
-                onChange={(e) =>
-                  setFilters({ ...filters, status: e.target.value })
-                }
-                className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              >
-                <option value="">Todos</option>
-                <option value="EM_PRODUCAO">Em Producao</option>
-                <option value="PAUSADO">Pausado</option>
-                <option value="FINALIZADO">Finalizado</option>
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="filter_date_from"
-                className="mb-1.5 block text-sm font-medium text-card-foreground"
-              >
-                Data Inicio
-              </label>
-              <input
-                id="filter_date_from"
-                type="date"
-                value={filters.date_from}
-                onChange={(e) =>
-                  setFilters({ ...filters, date_from: e.target.value })
-                }
-                className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="filter_date_to"
-                className="mb-1.5 block text-sm font-medium text-card-foreground"
-              >
-                Data Fim
-              </label>
-              <input
-                id="filter_date_to"
-                type="date"
-                value={filters.date_to}
-                onChange={(e) =>
-                  setFilters({ ...filters, date_to: e.target.value })
-                }
-                className="h-12 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
+          <div className="flex items-center gap-2 text-center">
+            <Calendar className="h-5 w-5 text-accent" />
+            <span className="text-lg font-bold text-foreground">
+              {MONTH_NAMES[selectedMonth.month]}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {selectedMonth.year}
+            </span>
           </div>
 
           <button
-            onClick={applyFilters}
-            className="mt-4 flex h-12 items-center gap-2 rounded-xl bg-accent px-6 font-bold text-accent-foreground transition-all hover:opacity-90"
+            onClick={() => changeMonth(1)}
+            className="flex items-center gap-1 rounded-lg bg-muted px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
           >
-            <Search className="h-5 w-5" />
-            Aplicar Filtros
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-      )}
 
-      {/* Summary Stats */}
+        {/* Operator + Part Filters */}
+        <div className="flex flex-col gap-3 rounded-xl bg-card p-4 shadow-sm sm:flex-row sm:items-center">
+          <div className="flex flex-1 items-center gap-2">
+            <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <select
+              value={selectedOperator}
+              onChange={(e) => setSelectedOperator(e.target.value)}
+              className="h-10 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <option value="all">Todos Operadores</option>
+              {operators.map((op: { id: number; name: string }) => (
+                <option key={op.id} value={op.id}>{op.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-1 items-center gap-2">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <input
+              type="text"
+              value={searchPart}
+              onChange={(e) => setSearchPart(e.target.value.toUpperCase())}
+              placeholder="Buscar peca..."
+              className="h-10 flex-1 rounded-lg border border-input bg-background px-3 font-mono text-sm text-foreground uppercase placeholder:font-sans placeholder:normal-case placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
       {displayRows.length > 0 && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              Tempo Med./Peca
-            </div>
-            <p className="mt-1 font-mono text-xl font-bold text-foreground">
-              {avgTimePP ? `${avgTimePP}min` : "-"}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <DollarSign className="h-3.5 w-3.5" />
-              Custo Maquina Total
-            </div>
-            <p className="mt-1 font-mono text-xl font-bold text-foreground">
-              R$ {totalMachineCost.toFixed(2)}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-              <DollarSign className="h-3.5 w-3.5" />
-              Valor Total Cobrado
-            </div>
-            <p className="mt-1 font-mono text-xl font-bold text-accent">
-              R$ {totalCharged.toFixed(2)}
-            </p>
-          </div>
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <History className="h-3.5 w-3.5" />
-              Na pagina
+              Total Pecas
             </div>
             <p className="mt-1 font-mono text-xl font-bold text-foreground">
               {displayRows.length}
-              <span className="text-sm font-normal text-muted-foreground">
-                {" "}
-                / {total}
-              </span>
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Building2 className="h-3.5 w-3.5" />
+              Empresas
+            </div>
+            <p className="mt-1 font-mono text-xl font-bold text-foreground">
+              {companyGroups.length}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <DollarSign className="h-3.5 w-3.5" />
+              Custo Maquina
+            </div>
+            <p className="mt-1 font-mono text-xl font-bold text-foreground">
+              R$ {globalTotalMachineCost.toFixed(2)}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <DollarSign className="h-3.5 w-3.5" />
+              Valor Cobrado
+            </div>
+            <p className="mt-1 font-mono text-xl font-bold text-accent">
+              R$ {globalTotalCharged.toFixed(2)}
             </p>
           </div>
         </div>
       )}
 
-      {/* Records */}
+      {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : displayRows.length === 0 ? (
+      ) : companyGroups.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-12 text-center shadow-sm">
           <History className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
           <h3 className="mb-1 text-lg font-semibold text-card-foreground">
             Nenhum registro encontrado
           </h3>
           <p className="text-sm text-muted-foreground">
-            {hasActiveFilters
-              ? "Tente ajustar os filtros."
-              : "Inicie producoes para ver o historico aqui."}
+            Sem producoes em {MONTH_NAMES[selectedMonth.month]} {selectedMonth.year}.
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {displayRows.map((row) => {
-            const rec = row.record;
-            const expanded =
-              rec.group_id ? expandedGroups.has(rec.group_id) : false;
-            const chargedPerPiece = Number(rec.charged_value) || 0;
-            const chargedTotal = chargedPerPiece * (rec.quantity || 0);
-
-            return (
-              <div
-                key={rec.group_id ? `g-${rec.group_id}` : `s-${rec.id}`}
-                className={`rounded-2xl border bg-card shadow-sm transition-shadow hover:shadow-md ${row.isGroup
-                  ? expanded
-                    ? "border-accent/50"
-                    : "border-border"
-                  : "border-border"
-                  }`}
-              >
-                {/* Card Principal */}
-                <div
-                  onClick={
-                    row.isGroup && rec.group_id
-                      ? () => toggleGroup(rec.group_id!)
-                      : undefined
-                  }
-                  className={`p-4 ${row.isGroup ? "cursor-pointer select-none" : ""
-                    }`}
-                >
-                  {/* Header: Peca + Empresa + Data + Status */}
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex items-center gap-3">
-                      {row.isGroup && (
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          {expanded ? (
-                            <ChevronDown className="h-5 w-5" />
-                          ) : (
-                            <ChevronExpand className="h-5 w-5" />
-                          )}
-                        </div>
-                      )}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-lg font-bold text-foreground">
-                            {rec.part_code}
-                          </span>
-                          {row.isGroup && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                              <Layers className="h-3 w-3" />
-                              {row.groupSize} operacoes
-                            </span>
-                          )}
-                        </div>
-                        {rec.part_description && (
-                          <p className="text-xs text-muted-foreground">
-                            {rec.part_description}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">
-                        {new Date(rec.start_time).toLocaleDateString("pt-BR")}
-                      </span>
-                      <span
-                        className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${rec.status === "FINALIZADO"
-                          ? "bg-muted text-muted-foreground"
-                          : rec.status === "EM_PRODUCAO"
-                            ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
-                            : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
-                          }`}
-                      >
-                        {rec.status === "EM_PRODUCAO"
-                          ? "Producao"
-                          : rec.status === "PAUSADO"
-                            ? "Pausado"
-                            : "Finalizado"}
-                      </span>
-                    </div>
+        <div className="space-y-6">
+          {companyGroups.map((group) => (
+            <div key={group.companyName}>
+              {/* Company Header */}
+              <div className="mb-3 rounded-xl bg-primary px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Building2 className="h-5 w-5 shrink-0 text-primary-foreground/70" />
+                    <h2 className="truncate text-base font-bold text-primary-foreground">
+                      {group.companyName}
+                    </h2>
+                    <span className="shrink-0 rounded-full bg-primary-foreground/20 px-2 py-0.5 text-xs font-semibold text-primary-foreground">
+                      {group.totalParts}
+                    </span>
                   </div>
-
-                  {/* Info Grid */}
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-10">
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Empresa
-                      </p>
-                      <p className="text-sm font-medium text-foreground">
-                        {rec.company_name || "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Operacao
-                      </p>
-                      <p className="text-sm font-medium text-foreground">
-                        {rec.operation_name}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Operador
-                      </p>
-                      <p className="text-sm font-medium text-foreground">
-                        {rec.operator_name}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Qtd
-                      </p>
-                      <p className="font-mono text-sm font-bold text-foreground">
-                        {rec.quantity}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Base/Hora
-                      </p>
-                      <p className="font-mono text-sm text-foreground">
-                        {rec.base_cost_per_hour
-                          ? `R$ ${Number(rec.base_cost_per_hour).toFixed(2)}`
-                          : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Maq/Hora
-                      </p>
-                      <p className="font-mono text-sm text-foreground">
-                        {rec.machine_cost_per_hour
-                          ? `R$ ${Number(rec.machine_cost_per_hour).toFixed(2)}`
-                          : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
+                  <div className="hidden items-center gap-4 sm:flex">
+                    <div className="text-right">
+                      <p className="text-[10px] font-medium uppercase text-primary-foreground/50">
                         Custo Maq.
                       </p>
-                      <p className="font-mono text-sm text-foreground">
-                        {rec.machine_cost
-                          ? `R$ ${Number(rec.machine_cost).toFixed(2)}`
-                          : "-"}
+                      <p className="font-mono text-sm font-bold text-primary-foreground/80">
+                        R$ {group.totalMachineCost.toFixed(2)}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Custo MP
+                    <div className="text-right">
+                      <p className="text-[10px] font-medium uppercase text-primary-foreground/50">
+                        Cobrado
                       </p>
-                      <p className="font-mono text-sm text-foreground">
-                        {rec.total_material_cost
-                          ? `R$ ${Number(rec.total_material_cost).toFixed(2)}`
-                          : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Valor/Pç
-                      </p>
-                      <p className="font-mono text-sm font-semibold text-accent">
-                        {chargedPerPiece > 0
-                          ? `R$ ${chargedPerPiece.toFixed(2)}`
-                          : "-"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                        Valor Total
-                      </p>
-                      <p className="font-mono text-sm font-bold text-accent">
-                        {chargedTotal > 0
-                          ? `R$ ${chargedTotal.toFixed(2)}`
-                          : "-"}
+                      <p className="font-mono text-sm font-bold text-primary-foreground">
+                        R$ {group.totalCharged.toFixed(2)}
                       </p>
                     </div>
                   </div>
-
-                  {/* Financial Analysis / Profitability - Only at Group Level */}
-                  {(() => {
-                    const allRecords = row.isGroup ? [rec, ...row.subRows] : [rec];
-                    const allFinished = allRecords.every(r => r.status === "FINALIZADO");
-                    const totalTime = allRecords.reduce((acc, r) => acc + (Number(r.total_time_min) || 0), 0);
-                    const realPerMin = totalTime > 0 ? chargedTotal / totalTime : 0;
-                    const TARGET_PER_MIN = 1.667; // Fixed business factor
-
-                    return (
-                      <div className="mt-3 flex items-center justify-between rounded-xl bg-muted/40 px-4 py-2">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Tempo Total
-                            </p>
-                            <p className="font-mono text-sm font-medium text-foreground">
-                              {totalTime.toFixed(2)} min
-                            </p>
-                          </div>
-                          <div className="h-8 w-px bg-border"></div>
-                          <div>
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Valor Cobrado
-                            </p>
-                            <p className="font-mono text-sm font-bold text-accent">
-                              R$ {chargedTotal.toFixed(2)}
-                            </p>
-                          </div>
-                          <div className="h-8 w-px bg-border"></div>
-                          <div>
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Real / Min
-                            </p>
-                            <p className={`font-mono text-sm font-bold ${allFinished
-                              ? realPerMin < TARGET_PER_MIN - 0.01
-                                ? "text-destructive"
-                                : realPerMin > TARGET_PER_MIN + 0.01
-                                  ? "text-emerald-500"
-                                  : "text-foreground"
-                              : "text-foreground"
-                              }`}>
-                              R$ {realPerMin.toFixed(2)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Meta / Min
-                            </p>
-                            <p className="font-mono text-sm text-muted-foreground">
-                              R$ {TARGET_PER_MIN.toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {totalTime === 0 ? (
-                            <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                              📊 Sem dados suficientes
-                            </span>
-                          ) : allFinished ? (
-                            realPerMin < TARGET_PER_MIN - 0.01 ? (
-                              <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-1 text-xs font-bold text-destructive">
-                                ❌ Ruim
-                              </span>
-                            ) : realPerMin > TARGET_PER_MIN + 0.01 ? (
-                              <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-500">
-                                🔥 Excelente
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs font-bold text-primary">
-                                ✅ Bom
-                              </span>
-                            )
-                          ) : (
-                            <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                              ⏳ Em andamento
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
+                <div className="mt-2 flex items-center gap-4 sm:hidden">
+                  <div>
+                    <p className="text-[10px] font-medium uppercase text-primary-foreground/50">Custo Maq.</p>
+                    <p className="font-mono text-xs font-bold text-primary-foreground/80">R$ {group.totalMachineCost.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-medium uppercase text-primary-foreground/50">Cobrado</p>
+                    <p className="font-mono text-xs font-bold text-primary-foreground">R$ {group.totalCharged.toFixed(2)}</p>
+                  </div>
+                </div>
+              </div>
 
-                {/* Sub-operacoes expandidas */}
-                {expanded && row.subRows.length > 0 && (
-                  <div className="border-t border-border bg-muted/30 px-4 pb-3 pt-2">
-                    <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                      Operacoes do grupo
-                    </p>
-                    <div className="space-y-2">
-                      {row.subRows.map((sub) => (
-                        <div
-                          key={sub.id}
-                          className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl bg-background p-3"
-                        >
-                          <div className="min-w-[80px]">
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Data
-                            </p>
-                            <p className="text-sm text-foreground">
-                              {new Date(sub.start_time).toLocaleDateString("pt-BR")}
-                            </p>
-                          </div>
-                          <div className="min-w-[100px]">
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Operacao
-                            </p>
-                            <p className="text-sm font-medium text-foreground">
-                              {sub.operation_name}
-                            </p>
-                          </div>
-                          <div className="min-w-[100px]">
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Operador
-                            </p>
-                            <p className="text-sm text-foreground">
-                              {sub.operator_name}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Qtd
-                            </p>
-                            <p className="font-mono text-sm font-bold text-foreground">
-                              {sub.quantity}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Tempo Total
-                            </p>
-                            <p className="font-mono text-sm text-foreground">
-                              {sub.total_time_min
-                                ? `${sub.total_time_min} min`
-                                : "-"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-medium uppercase text-muted-foreground">
-                              Tempo/Peca
-                            </p>
-                            <p className="font-mono text-sm text-foreground">
-                              {sub.time_per_piece_min
-                                ? `${sub.time_per_piece_min} min`
-                                : "-"}
-                            </p>
-                          </div>
-                          <div>
-                            <span
-                              className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold ${sub.status === "FINALIZADO"
-                                ? "bg-muted text-muted-foreground"
-                                : sub.status === "EM_PRODUCAO"
-                                  ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
-                                  : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
-                                }`}
-                            >
-                              {sub.status === "EM_PRODUCAO"
-                                ? "Producao"
-                                : sub.status === "PAUSADO"
-                                  ? "Pausado"
-                                  : "Finalizado"}
+              {/* Cards */}
+              <div className="space-y-2">
+                {group.rows.map((row) => {
+                  const rec = row.record;
+                  const cardKey = getCardKey(row);
+                  const expanded = expandedCards.has(cardKey);
+                  const chargedPerPiece = Number(rec.charged_value) || 0;
+                  const chargedTotal = chargedPerPiece * (rec.quantity || 0);
+                  const pauses = pauseCache[cardKey] || [];
+
+                  return (
+                    <div
+                      key={cardKey}
+                      className={`rounded-2xl border bg-card shadow-sm transition-all hover:shadow-md ${
+                        expanded ? "border-accent/50" : "border-border"
+                      }`}
+                    >
+                      {/* Card - Clicavel */}
+                      <div
+                        onClick={() => toggleCard(row)}
+                        className="cursor-pointer select-none p-4"
+                      >
+                        {/* Top row */}
+                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              {expanded ? (
+                                <ChevronDown className="h-4 w-4" />
+                              ) : (
+                                <ChevronExpand className="h-4 w-4" />
+                              )}
+                            </div>
+                            <span className="font-mono text-base font-bold text-foreground">
+                              {rec.part_code}
                             </span>
+                            {rec.part_description && (
+                              <span className="hidden text-sm text-muted-foreground sm:inline">
+                                {rec.part_description}
+                              </span>
+                            )}
+                            {row.isGroup && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                                <Layers className="h-3 w-3" />
+                                {row.groupSize} ops
+                              </span>
+                            )}
+                            {rec.total_pause_ms > 0 && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[hsl(var(--warning))]/10 px-2 py-0.5 text-[10px] font-semibold text-[hsl(var(--warning))]">
+                                <Pause className="h-3 w-3" />
+                                {Math.round(rec.total_pause_ms / 60000)}min
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(rec.start_time).toLocaleDateString("pt-BR")}
+                            </span>
+                            <StatusBadge status={rec.status} />
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
-          <p className="text-sm text-muted-foreground">
-            Pagina {page + 1} de {totalPages}
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setPage(Math.max(0, page - 1))}
-              disabled={page === 0}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-40"
-              aria-label="Pagina anterior"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-              disabled={page >= totalPages - 1}
-              className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground disabled:opacity-40"
-              aria-label="Proxima pagina"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
+                        {/* Info row */}
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+                          <InfoCell label="Operacao" value={rec.operation_name} />
+                          <InfoCell label="Operador" value={rec.operator_name} />
+                          <InfoCell label="Qtd" value={String(rec.quantity)} mono bold />
+                          <InfoCell
+                            label="Base/Hora"
+                            value={rec.base_cost_per_hour ? Number(rec.base_cost_per_hour).toFixed(2) : "-"}
+                            mono
+                          />
+                          <InfoCell
+                            label="Maq/Hora"
+                            value={rec.machine_cost_per_hour ? `R$ ${Number(rec.machine_cost_per_hour).toFixed(2)}` : "-"}
+                            mono
+                          />
+                          <InfoCell
+                            label="Custo Maq."
+                            value={rec.machine_cost ? `R$ ${Number(rec.machine_cost).toFixed(2)}` : "-"}
+                            mono
+                          />
+                          <InfoCell
+                            label="Valor/Pc"
+                            value={chargedPerPiece > 0 ? `R$ ${chargedPerPiece.toFixed(2)}` : "-"}
+                            mono accent
+                          />
+                          <InfoCell
+                            label="Valor Total"
+                            value={chargedTotal > 0 ? `R$ ${chargedTotal.toFixed(2)}` : "-"}
+                            mono bold accent
+                          />
+                        </div>
+
+                        {/* Profitability bar */}
+                        {(() => {
+                          const allRecs = row.isGroup ? [rec, ...row.subRows] : [rec];
+                          const allDone = allRecs.every((r) => r.status === "FINALIZADO");
+                          const totalTime = allRecs.reduce((a, r) => a + (Number(r.total_time_min) || 0), 0);
+                          const realPerMin = totalTime > 0 ? chargedTotal / totalTime : 0;
+                          const TARGET = 1.667;
+
+                          return (
+                            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-1.5">
+                              <div className="flex flex-wrap items-center gap-3 text-xs">
+                                <span className="text-muted-foreground">
+                                  <strong className="font-mono text-foreground">{totalTime.toFixed(1)}</strong> min
+                                </span>
+                                <span className="hidden h-3 w-px bg-border sm:block" />
+                                <span className="text-muted-foreground">
+                                  Real/Min{" "}
+                                  <strong
+                                    className={`font-mono ${
+                                      allDone
+                                        ? realPerMin < TARGET - 0.01
+                                          ? "text-destructive"
+                                          : realPerMin > TARGET + 0.01
+                                            ? "text-emerald-500"
+                                            : "text-foreground"
+                                        : "text-foreground"
+                                    }`}
+                                  >
+                                    R$ {realPerMin.toFixed(2)}
+                                  </strong>
+                                </span>
+                                <span className="hidden h-3 w-px bg-border sm:block" />
+                                <span className="text-muted-foreground">
+                                  Meta <strong className="font-mono text-muted-foreground">R$ {TARGET.toFixed(2)}</strong>
+                                </span>
+                              </div>
+                              <ProfitBadge allDone={allDone} realPerMin={realPerMin} target={TARGET} totalTime={totalTime} />
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Expanded Details */}
+                      {expanded && (
+                        <div className="border-t border-border bg-muted/30 px-4 pb-4 pt-3">
+                          {/* Group operations */}
+                          {row.isGroup && row.subRows.length > 0 && (
+                            <div className="mb-4">
+                              <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                                <Layers className="h-3.5 w-3.5" />
+                                Operacoes da peca ({row.groupSize})
+                              </p>
+                              <div className="space-y-1.5">
+                                <OperationRow rec={rec} index={1} highlight />
+                                {row.subRows.map((sub, idx) => (
+                                  <OperationRow key={sub.id} rec={sub} index={idx + 2} />
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Pause history */}
+                          <div>
+                            <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                              <Pause className="h-3.5 w-3.5" />
+                              Historico de Pausas
+                            </p>
+                            {pauses.length === 0 ? (
+                              <div className="rounded-xl bg-background p-3 text-center text-sm text-muted-foreground">
+                                Nenhuma pausa registrada.
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {pauses.map((p) => {
+                                  const opName = row.isGroup
+                                    ? [rec, ...row.subRows].find((r) => r.id === p.production_record_id)?.operation_name || "-"
+                                    : rec.operation_name;
+                                  return (
+                                    <div key={p.id} className="flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl bg-background p-3">
+                                      {row.isGroup && <InfoCell label="Operacao" value={opName} small />}
+                                      <InfoCell label="Motivo" value={p.reason} small bold />
+                                      <InfoCell
+                                        label="Pausado em"
+                                        value={new Date(p.paused_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                        small mono
+                                      />
+                                      <InfoCell
+                                        label="Retomado"
+                                        value={
+                                          p.resumed_at
+                                            ? new Date(p.resumed_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+                                            : "Em pausa"
+                                        }
+                                        small mono
+                                      />
+                                      <div>
+                                        <p className="text-[10px] font-medium uppercase text-muted-foreground">Duracao do Pause</p>
+                                        <p className="font-mono text-sm font-bold text-[hsl(var(--warning))]">
+                                          {p.duration_min !== null ? `${p.duration_min} min` : "..."}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---- Helper Components ---- */
+
+function InfoCell({
+  label,
+  value,
+  mono,
+  bold,
+  accent,
+  small,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  bold?: boolean;
+  accent?: boolean;
+  small?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium uppercase text-muted-foreground">{label}</p>
+      <p
+        className={`text-sm ${mono ? "font-mono" : ""} ${bold ? "font-bold" : "font-medium"} ${
+          accent ? "text-accent" : "text-foreground"
+        } ${small ? "text-xs" : ""}`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+        status === "FINALIZADO"
+          ? "bg-muted text-muted-foreground"
+          : status === "EM_PRODUCAO"
+            ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))]"
+            : "bg-[hsl(var(--warning))]/10 text-[hsl(var(--warning))]"
+      }`}
+    >
+      {status === "EM_PRODUCAO" ? "Producao" : status === "PAUSADO" ? "Pausado" : "Finalizado"}
+    </span>
+  );
+}
+
+function ProfitBadge({
+  allDone,
+  realPerMin,
+  target,
+  totalTime,
+}: {
+  allDone: boolean;
+  realPerMin: number;
+  target: number;
+  totalTime: number;
+}) {
+  if (totalTime === 0) {
+    return <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Sem dados</span>;
+  }
+  if (!allDone) {
+    return <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Em andamento</span>;
+  }
+  if (realPerMin < target - 0.01) {
+    return <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-bold text-destructive">Ruim</span>;
+  }
+  if (realPerMin > target + 0.01) {
+    return <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-500">Excelente</span>;
+  }
+  return <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">Bom</span>;
+}
+
+function OperationRow({ rec, index, highlight }: { rec: HistoryRecord; index: number; highlight?: boolean }) {
+  return (
+    <div className={`flex flex-wrap items-center gap-x-5 gap-y-1 rounded-xl bg-background p-3 ${highlight ? "ring-1 ring-accent/30" : ""}`}>
+      <span
+        className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+          highlight ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"
+        }`}
+      >
+        {index}
+      </span>
+      <InfoCell label="Data" value={new Date(rec.start_time).toLocaleDateString("pt-BR")} small />
+      <InfoCell label="Operacao" value={rec.operation_name} small bold />
+      <InfoCell label="Operador" value={rec.operator_name} small />
+      <InfoCell label="Tempo" value={rec.total_time_min ? `${rec.total_time_min} min` : "-"} small mono />
+      <StatusBadge status={rec.status} />
     </div>
   );
 }

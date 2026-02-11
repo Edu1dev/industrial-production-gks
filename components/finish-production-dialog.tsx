@@ -54,7 +54,7 @@ export function FinishProductionDialog({
                     }
                 })
                 .catch(() => {
-                    toast.error("Erro ao carregar operacoes");
+                    toast.error("Erro ao carregar operações");
                 });
         }
     }, [open, projectId]);
@@ -91,7 +91,7 @@ export function FinishProductionDialog({
             setExpectedTime("");
             setSelectedOperation(null);
         } catch {
-            toast.error("Erro de conexao");
+            toast.error("Erro de conexão");
         } finally {
             setLoading(false);
         }
@@ -124,7 +124,7 @@ export function FinishProductionDialog({
             onOpenChange(false);
             onFinished();
         } catch {
-            toast.error("Erro de conexao");
+            toast.error("Erro de conexão");
         } finally {
             setLoading(false);
         }

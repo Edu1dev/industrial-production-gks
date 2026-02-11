@@ -158,15 +158,15 @@ export async function POST(request: Request) {
         VALUES (${project.part_code.toUpperCase()}, ${project.description || null}, ${materialCost}, ${project.company_id})
         ON CONFLICT (code, company_id) WHERE company_id IS NOT NULL DO UPDATE SET
           description = COALESCE(${project.description || null}, parts.description),
-          material_cost = CASE WHEN ${materialCost} > 0 THEN ${materialCost} ELSE parts.material_cost END
+          material_cost = CASE WHEN ${materialCost}::numeric > 0 THEN ${materialCost}::numeric ELSE parts.material_cost END
         RETURNING id, code, description, material_cost, company_id
       `;
 
       const part = partResult[0];
 
-      // Calculate estimated_time_minutes from project's estimated_time_hours
-      const estimatedTimeMinutes = project.estimated_time_hours
-        ? Number(project.estimated_time_hours) * 60
+      // Get estimated_time_minutes from project
+      const estimatedTimeMinutes = project.estimated_time_minutes
+        ? Number(project.estimated_time_minutes)
         : null;
       const chargedValue = Number(project.charged_value_per_piece) || 0;
 
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
       VALUES (${part_code.toUpperCase()}, ${part_description || null}, ${material_cost || 0}, ${company_id})
       ON CONFLICT (code, company_id) WHERE company_id IS NOT NULL DO UPDATE SET
         description = COALESCE(${part_description || null}, parts.description),
-        material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
+        material_cost = CASE WHEN ${material_cost || 0}::numeric > 0 THEN ${material_cost || 0}::numeric ELSE parts.material_cost END
       RETURNING id, code, description, material_cost, company_id
     `;
   } else {
@@ -245,7 +245,7 @@ export async function POST(request: Request) {
       VALUES (${part_code.toUpperCase()}, ${part_description || null}, ${material_cost || 0})
       ON CONFLICT (code) WHERE company_id IS NULL DO UPDATE SET
         description = COALESCE(${part_description || null}, parts.description),
-        material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
+        material_cost = CASE WHEN ${material_cost || 0}::numeric > 0 THEN ${material_cost || 0}::numeric ELSE parts.material_cost END
       RETURNING id, code, description, material_cost, company_id
     `;
   }

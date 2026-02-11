@@ -208,7 +208,7 @@ export async function PATCH(
           end_time = NOW(),
           total_pause_ms = COALESCE(total_pause_ms, 0) + ${extraPause},
           last_pause_start = NULL,
-          charged_value = CASE WHEN ${charged_value || 0} > 0 THEN ${charged_value || 0} ELSE charged_value END
+          charged_value = CASE WHEN ${charged_value || 0}::numeric > 0 THEN ${charged_value || 0}::numeric ELSE charged_value END
       WHERE id = ${parseInt(id)}
       RETURNING *
     `;

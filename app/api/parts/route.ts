@@ -95,7 +95,7 @@ export async function POST(request: Request) {
       VALUES (${code.toUpperCase()}, ${description || null}, ${material_cost || 0}, ${company_id})
       ON CONFLICT (code, company_id) WHERE company_id IS NOT NULL DO UPDATE SET
         description = COALESCE(${description || null}, parts.description),
-        material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
+        material_cost = CASE WHEN ${material_cost || 0}::numeric > 0 THEN ${material_cost || 0}::numeric ELSE parts.material_cost END
       RETURNING id, code, description, material_cost, company_id
     `;
   } else {
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
       VALUES (${code.toUpperCase()}, ${description || null}, ${material_cost || 0})
       ON CONFLICT (code) WHERE company_id IS NULL DO UPDATE SET
         description = COALESCE(${description || null}, parts.description),
-        material_cost = CASE WHEN ${material_cost || 0} > 0 THEN ${material_cost || 0} ELSE parts.material_cost END
+        material_cost = CASE WHEN ${material_cost || 0}::numeric > 0 THEN ${material_cost || 0}::numeric ELSE parts.material_cost END
       RETURNING id, code, description, material_cost, company_id
     `;
   }
